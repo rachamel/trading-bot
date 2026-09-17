@@ -1,20 +1,20 @@
 # main.py
 # =============================================================================
-# SERVERLESS QUANT BOT (TWELVE DATA + KRAKEN -> TELEGRAM)
+# SERVERLESS QUANT BOT (YFINANCE + BYBIT -> TELEGRAM) - THE HYBRID APPROACH
 # =============================================================================
 
 import requests
 import pandas as pd
 import numpy as np
+import yfinance as yf
 import ccxt
 import time
+import os
 
-# --- CONFIGURATION (HARDCODED) ---
-# 👇 PASTE YOUR 3 KEYS DIRECTLY INSIDE THE QUOTES BELOW 👇
-TELEGRAM_BOT_TOKEN = "8712031624:AAH8GKakWgeuFaR8VvKeox2TbusGdZwE_xE"
-TELEGRAM_CHAT_ID = "5858961660"
-TWELVE_DATA_API_KEY = "f3245085e2aa49b5a6959ca5e395865a"
-# 👆 PASTE YOUR 3 KEYS DIRECTLY INSIDE THE QUOTES ABOVE 👆
+# --- CONFIGURATION ---
+# Paste your Telegram keys here. (No Forex API key needed!)
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or "8712031624:AAH8GKakWgeuFaR8VvKeox2TbusGdZwE_xE"
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or "5858961660"
 
 ACCOUNT_BALANCE = 10000.0
 RISK_PER_TRADE = 0.01
@@ -24,13 +24,14 @@ ZSCORE_ENTRY_THRESHOLD = 2.0
 LOOKBACK_PERIOD = 20
 
 # --- ASSETS ---
-TWELVE_DATA_PAIRS = [
-    "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "USD/CAD", "AUD/USD", "NZD/USD",
-    "XAU/USD", "XAG/USD",
-    "EUR/GBP", "EUR/JPY", "GBP/JPY", "AUD/JPY", "CHF/JPY", "EUR/AUD", "GBP/AUD"
+# Yahoo Finance format for Forex & Metals
+YFINANCE_PAIRS = [
+    "EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "USDCAD=X", "AUDUSD=X", "NZDUSD=X",
+    "GC=F", "SI=F",  # Gold and Silver Futures (Most reliable YF tickers for metals)
+    "EURGBP=X", "EURJPY=X", "GBPJPY=X", "AUDJPY=X", "CHFJPY=X", "EURAUD=X", "GBPAUD=X"
 ]
 
-# Kraken Crypto Pairs (Fixed for geo-blocking)
+# Bybit Crypto Pairs (Standard formatting, no geo-blocking)
 CRYPTO_PAIRS = [
     "BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT",
     "AVAX/USDT", "LINK/USDT", "DOT/USDT", "LTC/USDT", "NEAR/USDT"
@@ -50,42 +51,50 @@ def send_telegram(message):
         print(f"❌ Telegram connection error: {e}")
 
 # --- DATA FETCHERS ---
-def get_twelve_data(instrument, interval="4h", outputsize=250):
-    url = "https://api.twelvedata.com/time_series"
-    params = {
-        "symbol": instrument,
-        "interval": interval,
-        "outputsize": outputsize,
-        "apikey": TWELVE_DATA_API_KEY,
-        "format": "JSON"
-    }
+def get_yfinance_data(symbol):
+    """Fetches 1H data from Yahoo Finance and resamples to 4H and 1D locally."""
     try:
-        response = requests.get(url, params=params)
-        data = response.json()
-        if "status" in data and data["status"] == "error":
-            print(f"[12Data] Error for {instrument}: {data.get('message')}")
-            return pd.DataFrame()
-        values = data.get("values", [])
-        if not values: return pd.DataFrame()
-        df = pd.DataFrame(reversed(values))
-        for col in ['open', 'high', 'low', 'close']:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-        return df.dropna()
+        # Download 1H data (YF allows max 730 days for 1H, we only need 60 days)
+        raw = yf.download(symbol, period="60d", interval="1h", progress=False)
+        if raw.empty: return None, None
+        
+        # Handle MultiIndex columns if YF returns them
+        if isinstance(raw.columns, pd.MultiIndex):
+            raw.columns = raw.columns.droplevel(1)
+            
+        # Clean up column names to lowercase
+        raw.columns = [c.lower() for c in raw.columns]
+        
+        # Resample 1H data into 4H candles
+        df_4h = raw.resample('4h').agg({
+            'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'
+        }).dropna().reset_index()
+        
+        # Resample 1H data into Daily (1D) candles
+        df_1d = raw.resample('1D').agg({
+            'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'
+        }).dropna().reset_index()
+        
+        return df_4h, df_1d
+        
     except Exception as e:
-        print(f"[12Data] Fetch Error {instrument}: {e}")
-        return pd.DataFrame()
+        print(f"[YFinance] Error for {symbol}: {e}")
+        return None, None
 
-def get_crypto_data(symbol, timeframe="4h", limit=250):
-    """Fetches Crypto data from Kraken (No geo-blocking)."""
+def get_crypto_data(symbol):
+    """Fetches Crypto data from Bybit."""
     try:
-        # Using Kraken instead of Binance to bypass restricted location errors
-        exchange = ccxt.kraken() 
-        bars = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-        df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        return df
+        exchange = ccxt.bybit() 
+        bars_4h = exchange.fetch_ohlcv(symbol, timeframe="4h", limit=250)
+        df_4h = pd.DataFrame(bars_4h, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        
+        bars_1d = exchange.fetch_ohlcv(symbol, timeframe="1d", limit=250)
+        df_1d = pd.DataFrame(bars_1d, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        
+        return df_4h, df_1d
     except Exception as e:
-        print(f"[Kraken] Error fetching {symbol}: {e}")
-        return pd.DataFrame()
+        print(f"[Bybit] Error fetching {symbol}: {e}")
+        return None, None
 
 # --- MATH ENGINE ---
 def calculate_indicators(df):
@@ -101,7 +110,7 @@ def calculate_indicators(df):
     return df.dropna()
 
 def is_data_clean(df):
-    if df.empty: return False
+    if df is None or df.empty: return False
     latest = df.iloc[-1]
     if latest['high'] == latest['low'] == latest['open'] == latest['close']:
         return False
@@ -109,8 +118,10 @@ def is_data_clean(df):
 
 def evaluate_signal(symbol, df_4h, df_1d):
     if not is_data_clean(df_4h) or not is_data_clean(df_1d): return None
+    
     df_4h = calculate_indicators(df_4h)
     df_1d = calculate_indicators(df_1d)
+    
     if len(df_4h) < 2 or len(df_1d) < 2: return None
     if pd.isna(df_1d['ema_200'].iloc[-1]): return None
 
@@ -142,25 +153,26 @@ def evaluate_signal(symbol, df_4h, df_1d):
 
 # --- MAIN EXECUTION ---
 def main():
-    print("🤖 Starting Serverless Scan...")
+    print("🤖 Starting Serverless Scan (Hybrid YFinance + Bybit)...")
     send_telegram("🟢 *Quant Bot Online*\nStarting scheduled 4H scan...")
 
     signals_found = []
 
-    for pair in TWELVE_DATA_PAIRS:
-        df_4h = get_twelve_data(pair, interval="4h")
-        df_1d = get_twelve_data(pair, interval="1day")
+    # 1. Scan Forex & Metals (YFinance - Lightning fast, no rate limits)
+    for pair in YFINANCE_PAIRS:
+        df_4h, df_1d = get_yfinance_data(pair)
+        signal = evaluate_signal(pair, df_4h, df_1d)
+        if signal: signals_found.append(signal)
+        time.sleep(0.1) # Tiny sleep just to be polite to Yahoo's servers
+
+    # 2. Scan Crypto (Bybit)
+    for pair in CRYPTO_PAIRS:
+        df_4h, df_1d = get_crypto_data(pair)
         signal = evaluate_signal(pair, df_4h, df_1d)
         if signal: signals_found.append(signal)
         time.sleep(0.5)
 
-    for pair in CRYPTO_PAIRS:
-        df_4h = get_crypto_data(pair, timeframe="4h")
-        df_1d = get_crypto_data(pair, timeframe="1d")
-        signal = evaluate_signal(pair, df_4h, df_1d)
-        if signal: signals_found.append(signal)
-        time.sleep(0.2)
-
+    # 3. Send Results
     if not signals_found:
         send_telegram("✅ *Auto-Scan Complete*\n\nNo high-probability setups detected.\nThe model is preserving capital.")
     else:
