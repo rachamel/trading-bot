@@ -1,6 +1,6 @@
 # main.py
 # =============================================================================
-# SERVERLESS QUANT BOT (TWELVE DATA + KRAKEN -> TELEGRAM) WITH DIAGNOSTICS
+# SERVERLESS QUANT BOT (TWELVE DATA + KRAKEN -> TELEGRAM)
 # =============================================================================
 
 import requests
@@ -8,12 +8,13 @@ import pandas as pd
 import numpy as np
 import ccxt
 import time
-import os
 
-# --- CONFIGURATION ---
-TELEGRAM_BOT_TOKEN = os.environ.get("8712031624:AAH8GKakWgeuFaR8VvKeox2TbusGdZwE_xE")
-TELEGRAM_CHAT_ID = os.environ.get("5858961660")
-TWELVE_DATA_API_KEY = os.environ.get("f3245085e2aa49b5a6959ca5e395865a")
+# --- CONFIGURATION (HARDCODED) ---
+# 👇 PASTE YOUR 3 KEYS DIRECTLY INSIDE THE QUOTES BELOW 👇
+TELEGRAM_BOT_TOKEN = "8712031624:AAH8GKakWgeuFaR8VvKeox2TbusGdZwE_xE"
+TELEGRAM_CHAT_ID = "5858961660"
+TWELVE_DATA_API_KEY = "f3245085e2aa49b5a6959ca5e395865a"
+# 👆 PASTE YOUR 3 KEYS DIRECTLY INSIDE THE QUOTES ABOVE 👆
 
 ACCOUNT_BALANCE = 10000.0
 RISK_PER_TRADE = 0.01
@@ -29,33 +30,24 @@ TWELVE_DATA_PAIRS = [
     "EUR/GBP", "EUR/JPY", "GBP/JPY", "AUD/JPY", "CHF/JPY", "EUR/AUD", "GBP/AUD"
 ]
 
-# Kraken Crypto Pairs
+# Kraken Crypto Pairs (Fixed for geo-blocking)
 CRYPTO_PAIRS = [
     "BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT",
     "AVAX/USDT", "LINK/USDT", "DOT/USDT", "LTC/USDT", "NEAR/USDT"
 ]
 
-# --- TELEGRAM SENDER (WITH DIAGNOSTICS) ---
+# --- TELEGRAM SENDER ---
 def send_telegram(message):
-    if not TELEGRAM_BOT_TOKEN:
-        print("❌ DIAGNOSTIC: TELEGRAM_BOT_TOKEN is missing from GitHub Secrets.")
-        return False
-    if not TELEGRAM_CHAT_ID:
-        print("❌ DIAGNOSTIC: TELEGRAM_CHAT_ID is missing from GitHub Secrets.")
-        return False
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}
     try:
         r = requests.post(url, json=payload, timeout=30)
         if r.status_code == 200:
             print("✅ Telegram message sent successfully.")
-            return True
         else:
             print(f"❌ Telegram API error {r.status_code}: {r.text}")
-            return False
     except Exception as e:
         print(f"❌ Telegram connection error: {e}")
-        return False
 
 # --- DATA FETCHERS ---
 def get_twelve_data(instrument, interval="4h", outputsize=250):
@@ -86,7 +78,7 @@ def get_twelve_data(instrument, interval="4h", outputsize=250):
 def get_crypto_data(symbol, timeframe="4h", limit=250):
     """Fetches Crypto data from Kraken (No geo-blocking)."""
     try:
-        # Switched from Binance to Kraken to avoid 451 Restricted Location errors
+        # Using Kraken instead of Binance to bypass restricted location errors
         exchange = ccxt.kraken() 
         bars = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
         df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
