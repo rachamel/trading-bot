@@ -1,18 +1,16 @@
 # main.py
 # =============================================================================
-# SERVERLESS QUANT BOT (YFINANCE + BYBIT -> TELEGRAM) - THE HYBRID APPROACH
+# SERVERLESS QUANT BOT (UNIFIED YFINANCE -> TELEGRAM)
 # =============================================================================
 
 import requests
 import pandas as pd
 import numpy as np
 import yfinance as yf
-import ccxt
 import time
 import os
 
 # --- CONFIGURATION ---
-# Paste your Telegram keys here. (No Forex API key needed!)
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or "8712031624:AAH8GKakWgeuFaR8VvKeox2TbusGdZwE_xE"
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or "5858961660"
 
@@ -27,14 +25,14 @@ LOOKBACK_PERIOD = 20
 # Yahoo Finance format for Forex & Metals
 YFINANCE_PAIRS = [
     "EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "USDCAD=X", "AUDUSD=X", "NZDUSD=X",
-    "GC=F", "SI=F",  # Gold and Silver Futures (Most reliable YF tickers for metals)
+    "GC=F", "SI=F",  # Gold and Silver Futures 
     "EURGBP=X", "EURJPY=X", "GBPJPY=X", "AUDJPY=X", "CHFJPY=X", "EURAUD=X", "GBPAUD=X"
 ]
 
-# Bybit Crypto Pairs (Standard formatting, no geo-blocking)
+# Yahoo Finance format for Crypto (No more geo-blocking!)
 CRYPTO_PAIRS = [
-    "BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT",
-    "AVAX/USDT", "LINK/USDT", "DOT/USDT", "LTC/USDT", "NEAR/USDT"
+    "BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "ADA-USD",
+    "AVAX-USD", "LINK-USD", "DOT-USD", "LTC-USD", "NEAR-USD"
 ]
 
 # --- TELEGRAM SENDER ---
@@ -50,13 +48,15 @@ def send_telegram(message):
     except Exception as e:
         print(f"❌ Telegram connection error: {e}")
 
-# --- DATA FETCHERS ---
+# --- DATA FETCHER (Unified for Forex, Metals, and Crypto) ---
 def get_yfinance_data(symbol):
     """Fetches 1H data from Yahoo Finance and resamples to 4H and 1D locally."""
     try:
         # Download 1H data (YF allows max 730 days for 1H, we only need 60 days)
         raw = yf.download(symbol, period="60d", interval="1h", progress=False)
-        if raw.empty: return None, None
+        if raw.empty: 
+            print(f"[YFinance] No data returned for {symbol}")
+            return None, None
         
         # Handle MultiIndex columns if YF returns them
         if isinstance(raw.columns, pd.MultiIndex):
@@ -79,21 +79,6 @@ def get_yfinance_data(symbol):
         
     except Exception as e:
         print(f"[YFinance] Error for {symbol}: {e}")
-        return None, None
-
-def get_crypto_data(symbol):
-    """Fetches Crypto data from Bybit."""
-    try:
-        exchange = ccxt.bybit() 
-        bars_4h = exchange.fetch_ohlcv(symbol, timeframe="4h", limit=250)
-        df_4h = pd.DataFrame(bars_4h, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        
-        bars_1d = exchange.fetch_ohlcv(symbol, timeframe="1d", limit=250)
-        df_1d = pd.DataFrame(bars_1d, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        
-        return df_4h, df_1d
-    except Exception as e:
-        print(f"[Bybit] Error fetching {symbol}: {e}")
         return None, None
 
 # --- MATH ENGINE ---
@@ -153,24 +138,24 @@ def evaluate_signal(symbol, df_4h, df_1d):
 
 # --- MAIN EXECUTION ---
 def main():
-    print("🤖 Starting Serverless Scan (Hybrid YFinance + Bybit)...")
+    print("🤖 Starting Serverless Scan (Unified YFinance)...")
     send_telegram("🟢 *Quant Bot Online*\nStarting scheduled 4H scan...")
 
     signals_found = []
 
-    # 1. Scan Forex & Metals (YFinance - Lightning fast, no rate limits)
+    # 1. Scan Forex & Metals
     for pair in YFINANCE_PAIRS:
         df_4h, df_1d = get_yfinance_data(pair)
         signal = evaluate_signal(pair, df_4h, df_1d)
         if signal: signals_found.append(signal)
-        time.sleep(0.1) # Tiny sleep just to be polite to Yahoo's servers
+        time.sleep(0.1) 
 
-    # 2. Scan Crypto (Bybit)
+    # 2. Scan Crypto (Now using YFinance to avoid geo-blocking)
     for pair in CRYPTO_PAIRS:
-        df_4h, df_1d = get_crypto_data(pair)
+        df_4h, df_1d = get_yfinance_data(pair)
         signal = evaluate_signal(pair, df_4h, df_1d)
         if signal: signals_found.append(signal)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     # 3. Send Results
     if not signals_found:
