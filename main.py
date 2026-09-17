@@ -1,6 +1,8 @@
 # main.py
 # =============================================================================
-# UNIFIED QUANT BOT (4H SWING + 1H IN & OUT) -> TELEGRAM
+# SERVERLESS QUANT BOT - 1H IN & OUT MODEL (LAB2-VALIDATED FINAL CONFIG)
+# Z=1.5 | SL=2.5xATR(50) | TP=50-SMA static limit | tailcap |Z|<=3.5
+# Trend filter: 4H EMA200 | Risk: 0.5% | Scan: hourly at :05 UTC
 # =============================================================================
 
 import requests
@@ -14,176 +16,142 @@ import os
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or "8712031624:AAH8GKakWgeuFaR8VvKeox2TbusGdZwE_xE"
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or "5858961660"
 
-ACCOUNT_BALANCE = 10000.0
-RISK_PER_TRADE = 0.01
-RR_RATIO = 2.5
-ATR_MULTIPLIER_SL = 1.5
+ACCOUNT_BALANCE = 1000.0     # UPDATE MONTHLY to your real balance (this is how compounding works)
+RISK_PER_TRADE = 0.005       # 0.5% risk per trade ($5 on a $1,000 account)
 
-# --- 4H MODEL PARAMETERS ---
-ZSCORE_4H = 2.0
-LOOKBACK_4H = 20
+# --- LAB2-VALIDATED PARAMETERS ---
+ZSCORE_ENTRY = 1.5           # Z-Score crossover threshold
+TAIL_CAP = 3.5               # reject entries beyond |Z| 3.5 (crashes, not pullbacks)
+LOOKBACK_1H = 50             # Z-Score & ATR lookback on 1H
+ATR_MULTIPLIER_SL = 2.5      # Stop Loss = 2.5 x ATR(50)
+TREND_EMA_4H = 200           # 4H EMA200 trend filter
 
-# --- 1H MODEL PARAMETERS ---
-ZSCORE_1H = 2.5
-LOOKBACK_1H = 50
-LOOKBACK_TREND_4H = 200 # EMA for 1H model's trend filter
-
-# --- ASSETS ---
 ALL_PAIRS = [
     "EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "USDCAD=X", "AUDUSD=X", "NZDUSD=X",
     "GC=F", "SI=F", "EURGBP=X", "EURJPY=X", "GBPJPY=X", "AUDJPY=X", "CHFJPY=X", "EURAUD=X", "GBPAUD=X",
-    "BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "ADA-USD", "AVAX-USD", "LINK-USD", "DOT-USD", "LTC-USD", "NEAR-USD"
+    "BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "ADA-USD",
+    "AVAX-USD", "LINK-USD", "DOT-USD", "LTC-USD", "NEAR-USD"
 ]
 
-# --- TELEGRAM SENDER ---
+# --- TELEGRAM ---
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}
     try:
         r = requests.post(url, json=payload, timeout=30)
-        if r.status_code == 200: print("✅ Telegram message sent.")
-        else: print(f"❌ Telegram API error {r.status_code}: {r.text}")
-    except Exception as e: print(f"❌ Telegram connection error: {e}")
+        if r.status_code == 200: print("✅ Telegram sent")
+        else: print(f"❌ Telegram {r.status_code}: {r.text}")
+    except Exception as e:
+        print(f"❌ Telegram error: {e}")
 
-# --- DATA FETCHER (Fetches 1H and resamples everything locally) ---
-def get_all_timeframes(symbol):
-    """Fetches 1H data and creates 4H and 1D dataframes locally."""
+def fmt(p, s):
+    if p >= 100: return f"{p:.2f}"
+    if p >= 10: return f"{p:.3f}"
+    if "JPY" in s: return f"{p:.3f}"
+    return f"{p:.5f}"
+
+# --- DATA (closed candles only - no lookahead) ---
+def get_data(symbol):
     try:
-        raw = yf.download(symbol, period="60d", interval="1h", progress=False)
-        if raw.empty: return None, None, None
+        raw = yf.download(symbol, period="120d", interval="1h", progress=False)
+        if raw.empty: return None, None
         if isinstance(raw.columns, pd.MultiIndex): raw.columns = raw.columns.droplevel(1)
         raw.columns = [c.lower() for c in raw.columns]
-        
-        df_1h = raw.copy()
-        
-        # Resample to 4H (Used for 4H signal AND 1H trend filter)
-        df_4h = raw.resample('4h').agg({
-            'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'
-        }).dropna().reset_index()
-        
-        # Resample to 1D (Used for 4H trend filter)
-        df_1d = raw.resample('1D').agg({
-            'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'
-        }).dropna().reset_index()
-        
-        return df_1h, df_4h, df_1d
+
+        now = pd.Timestamp.now(tz='UTC')
+        raw = raw[raw.index + pd.Timedelta(hours=1) <= now]      # closed 1H only
+        if len(raw) < LOOKBACK_1H + 2: return None, None
+
+        df4 = raw.resample('4h').agg({'open':'first','high':'max','low':'min','close':'last'}).dropna()
+        df4 = df4[df4.index + pd.Timedelta(hours=4) <= now]      # closed 4H only
+        if len(df4) < TREND_EMA_4H: return None, None
+        return raw, df4
     except Exception as e:
-        print(f"[YF] Error {symbol}: {e}")
-        return None, None, None
+        print(f"[YF] {symbol}: {e}")
+        return None, None
 
-# --- 4H SIGNAL EVALUATOR ---
-def check_4h_signal(symbol, df_4h, df_1d):
-    if df_4h is None or df_1d is None or len(df_4h) < LOOKBACK_4H + 2 or len(df_1d) < 201: return None
-    
-    # 4H Indicators
-    df_4h['sma'] = df_4h['close'].rolling(window=LOOKBACK_4H).mean()
-    df_4h['std'] = df_4h['close'].rolling(window=LOOKBACK_4H).std()
-    df_4h['zscore'] = (df_4h['close'] - df_4h['sma']) / df_4h['std'].replace(0, np.nan)
-    df_4h['prev_close'] = df_4h['close'].shift(1)
-    df_4h['tr'] = np.maximum(df_4h['high'] - df_4h['low'], np.maximum(abs(df_4h['high'] - df_4h['prev_close']), abs(df_4h['low'] - df_4h['prev_close'])))
-    df_4h['atr'] = df_4h['tr'].rolling(window=LOOKBACK_4H).mean()
-    
-    # 1D Trend Filter (EMA 200)
-    df_1d['ema_200'] = df_1d['close'].ewm(span=200, adjust=False).mean()
-    
-    latest = df_4h.iloc[-1]
-    prev = df_4h.iloc[-2]
-    trend = df_1d.iloc[-1]
-    
-    is_uptrend = trend['close'] > trend['ema_200']
-    is_downtrend = trend['close'] < trend['ema_200']
-    
-    # Crossover logic for 4H (Only alerts exactly when it crosses)
-    if prev['zscore'] >= -ZSCORE_4H and latest['zscore'] < -ZSCORE_4H and is_uptrend:
-        sl_dist = ATR_MULTIPLIER_SL * latest['atr']
-        entry = latest['close']
-        return {"symbol": symbol, "tf": "4H SWING", "direction": "🟢 LONG", "entry": entry, 
-                "sl": entry - sl_dist, "tp": entry + (RR_RATIO * sl_dist), "reason": f"4H Z: {latest['zscore']:.2f}"}
-                
-    if prev['zscore'] <= ZSCORE_4H and latest['zscore'] > ZSCORE_4H and is_downtrend:
-        sl_dist = ATR_MULTIPLIER_SL * latest['atr']
-        entry = latest['close']
-        return {"symbol": symbol, "tf": "4H SWING", "direction": "🔴 SHORT", "entry": entry, 
-                "sl": entry + sl_dist, "tp": entry - (RR_RATIO * sl_dist), "reason": f"4H Z: {latest['zscore']:.2f}"}
-                
+# --- SIGNAL ENGINE (mirrors lab2.py simulation exactly) ---
+def evaluate(symbol, df1, df4):
+    if df1 is None or df4 is None: return None
+
+    c = df1['close']
+    sma = c.rolling(LOOKBACK_1H).mean()
+    std = c.rolling(LOOKBACK_1H).std()
+    z = (c - sma) / std.replace(0, np.nan)
+
+    pc = c.shift(1)
+    tr = np.maximum(df1['high'] - df1['low'],
+                    np.maximum(abs(df1['high'] - pc), abs(df1['low'] - pc)))
+    atr = tr.rolling(LOOKBACK_1H).mean()
+
+    ema4 = df4['close'].ewm(span=TREND_EMA_4H, adjust=False).mean()
+    uptrend = df4['close'].iloc[-1] > ema4.iloc[-1]
+    downtrend = df4['close'].iloc[-1] < ema4.iloc[-1]
+
+    zl, zp = z.iloc[-1], z.iloc[-2]
+    a = atr.iloc[-1]
+    if pd.isna(zl) or pd.isna(zp) or pd.isna(a) or a <= 0: return None
+
+    # TAILCAP FILTER: skip crashes/squeezes, only trade statistical stretches
+    if abs(zl) > TAIL_CAP: return None
+
+    entry = c.iloc[-1]
+    risk_dist = ATR_MULTIPLIER_SL * a
+    tp_price = sma.iloc[-1]                     # static mean-reversion target
+    if pd.isna(tp_price): return None
+
+    # LONG: Z crosses below -1.5 during 4H uptrend
+    if zp >= -ZSCORE_ENTRY and zl < -ZSCORE_ENTRY and uptrend:
+        sl = entry - risk_dist
+        if tp_price <= entry: return None       # no room to the mean: skip
+        r_target = (tp_price - entry) / risk_dist
+        return {"symbol": symbol, "direction": "🟢 LONG", "entry": entry,
+                "sl": sl, "tp": tp_price, "z": zl, "r_target": r_target}
+
+    # SHORT: Z crosses above +1.5 during 4H downtrend
+    if zp <= ZSCORE_ENTRY and zl > ZSCORE_ENTRY and downtrend:
+        sl = entry + risk_dist
+        if tp_price >= entry: return None
+        r_target = (entry - tp_price) / risk_dist
+        return {"symbol": symbol, "direction": "🔴 SHORT", "entry": entry,
+                "sl": sl, "tp": tp_price, "z": zl, "r_target": r_target}
+
     return None
 
-# --- 1H SIGNAL EVALUATOR ---
-def check_1h_signal(symbol, df_1h, df_4h):
-    if df_1h is None or df_4h is None or len(df_1h) < LOOKBACK_1H + 1 or len(df_4h) < LOOKBACK_TREND_4H: return None
-    
-    # 1H Indicators
-    df_1h['sma'] = df_1h['close'].rolling(window=LOOKBACK_1H).mean()
-    df_1h['std'] = df_1h['close'].rolling(window=LOOKBACK_1H).std()
-    df_1h['zscore'] = (df_1h['close'] - df_1h['sma']) / df_1h['std'].replace(0, np.nan)
-    df_1h['prev_close'] = df_1h['close'].shift(1)
-    df_1h['tr'] = np.maximum(df_1h['high'] - df_1h['low'], np.maximum(abs(df_1h['high'] - df_1h['prev_close']), abs(df_1h['low'] - df_1h['prev_close'])))
-    df_1h['atr'] = df_1h['tr'].rolling(window=LOOKBACK_1H).mean()
-    
-    # 4H Trend Filter (EMA 200)
-    df_4h['ema_200'] = df_4h['close'].ewm(span=LOOKBACK_TREND_4H, adjust=False).mean()
-    
-    latest = df_1h.iloc[-1]
-    trend = df_4h.iloc[-1]
-    
-    is_uptrend = trend['close'] > trend['ema_200']
-    is_downtrend = trend['close'] < trend['ema_200']
-    
-    is_green = latest['close'] > latest['open']
-    is_red = latest['close'] < latest['open']
-    
-    # 1H logic (Threshold + Candle Confirmation)
-    if latest['zscore'] < -ZSCORE_1H and is_uptrend and is_green:
-        sl_dist = ATR_MULTIPLIER_SL * latest['atr']
-        entry = latest['close']
-        return {"symbol": symbol, "tf": "1H IN&OUT", "direction": "🟢 LONG", "entry": entry, 
-                "sl": entry - sl_dist, "tp": entry + (RR_RATIO * sl_dist), "reason": f"1H Z: {latest['zscore']:.2f} + Green Candle"}
-                
-    if latest['zscore'] > ZSCORE_1H and is_downtrend and is_red:
-        sl_dist = ATR_MULTIPLIER_SL * latest['atr']
-        entry = latest['close']
-        return {"symbol": symbol, "tf": "1H IN&OUT", "direction": "🔴 SHORT", "entry": entry, 
-                "sl": entry + sl_dist, "tp": entry - (RR_RATIO * sl_dist), "reason": f"1H Z: {latest['zscore']:.2f} + Red Candle"}
-                
-    return None
-
-# --- MAIN EXECUTION ---
+# --- MAIN ---
 def main():
-    print("🤖 Starting Unified Scan (4H Swing + 1H In & Out)...")
-    send_telegram("🟢 *Unified Quant Bot Online*\nScanning 26 assets for 4H & 1H setups...")
-
-    signals_found = []
+    print("🤖 1H In & Out scan (Lab2 final config)...")
+    signals = []
     for pair in ALL_PAIRS:
-        df_1h, df_4h, df_1d = get_all_timeframes(pair)
-        
-        # Check 4H Setup
-        sig_4h = check_4h_signal(pair, df_4h, df_1d)
-        if sig_4h: signals_found.append(sig_4h)
-        
-        # Check 1H Setup
-        sig_1h = check_1h_signal(pair, df_1h, df_4h)
-        if sig_1h: signals_found.append(sig_1h)
-        
-        time.sleep(0.2) # Be polite to Yahoo
+        df1, df4 = get_data(pair)
+        sig = evaluate(pair, df1, df4)
+        if sig: signals.append(sig)
+        time.sleep(0.2)
 
-    if not signals_found:
-        send_telegram("✅ *Scan Complete*\n\nNo high-probability 4H or 1H setups detected.\nPreserving capital.")
-    else:
-        send_telegram(f"🚨 *{len(signals_found)} NEW SIGNALS DETECTED* 🚨")
-        for sig in signals_found:
+    risk_amount = round(ACCOUNT_BALANCE * RISK_PER_TRADE, 2)
+
+    if signals:
+        send_telegram(f"🚨 *{len(signals)} NEW 1H SIGNAL(S)* 🚨")
+        for s in signals:
             msg = (
-                f"⏱️ *Timeframe:* `{sig['tf']}`\n"
-                f"📊 *Asset:* `{sig['symbol']}`\n"
-                f"🧭 *Direction:* {sig['direction']}\n"
-                f"🎯 *Entry:* `{sig['entry']:.5f}`\n"
-                f"🛑 *Stop Loss:* `{sig['sl']:.5f}`\n"
-                f"💰 *Take Profit:* `{sig['tp']:.5f}`\n\n"
-                f"🛡️ *Risk (1%):* `${round(ACCOUNT_BALANCE * RISK_PER_TRADE, 2)}`\n"
-                f"🧠 *Reason:* {sig['reason']}"
+                f"⏱️ *Model:* 1H IN & OUT (Lab2 config)\n"
+                f"📊 *Asset:* `{s['symbol']}`\n"
+                f"🧭 *Direction:* {s['direction']}\n"
+                f"🎯 *Entry:* ~`{fmt(s['entry'], s['symbol'])}` (market)\n"
+                f"🛑 *Stop Loss:* `{fmt(s['sl'], s['symbol'])}` (2.5×ATR)\n"
+                f"💰 *Take Profit:* `{fmt(s['tp'], s['symbol'])}` (50-SMA limit)\n"
+                f"📐 *Target:* +{s['r_target']:.2f}R\n\n"
+                f"🛡️ *Risk (0.5%):* `${risk_amount}`\n"
+                f"🧠 *Reason:* 1H Z crossed to {s['z']:.2f} | 4H trend aligned | tail OK\n"
+                f"⚠️ Set SL+TP as bracket immediately. Never widen the stop."
             )
             send_telegram(msg)
+    else:
+        # Silent unless daily heartbeat
+        if pd.Timestamp.now(tz='UTC').hour == 20:
+            send_telegram("🫀 *Daily Heartbeat (20:05 UTC)*\nBot alive • 1H Lab2 config • 26 assets scanned • no setups this hour.")
 
-    print(f"✅ Scan complete. Signals found: {len(signals_found)}")
+    print(f"✅ Scan complete. Signals: {len(signals)}")
 
 if __name__ == "__main__":
     main()
