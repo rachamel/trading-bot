@@ -1,6 +1,6 @@
 # main.py
 # =============================================================================
-# SERVERLESS QUANT BOT (TWELVE DATA + BINANCE -> TELEGRAM) WITH DIAGNOSTICS
+# SERVERLESS QUANT BOT (TWELVE DATA + KRAKEN -> TELEGRAM) WITH DIAGNOSTICS
 # =============================================================================
 
 import requests
@@ -29,6 +29,7 @@ TWELVE_DATA_PAIRS = [
     "EUR/GBP", "EUR/JPY", "GBP/JPY", "AUD/JPY", "CHF/JPY", "EUR/AUD", "GBP/AUD"
 ]
 
+# Kraken Crypto Pairs
 CRYPTO_PAIRS = [
     "BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT",
     "AVAX/USDT", "LINK/USDT", "DOT/USDT", "LTC/USDT", "NEAR/USDT"
@@ -83,13 +84,15 @@ def get_twelve_data(instrument, interval="4h", outputsize=250):
         return pd.DataFrame()
 
 def get_crypto_data(symbol, timeframe="4h", limit=250):
+    """Fetches Crypto data from Kraken (No geo-blocking)."""
     try:
-        exchange = ccxt.binance()
+        # Switched from Binance to Kraken to avoid 451 Restricted Location errors
+        exchange = ccxt.kraken() 
         bars = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
         df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         return df
     except Exception as e:
-        print(f"[Binance] Error fetching {symbol}: {e}")
+        print(f"[Kraken] Error fetching {symbol}: {e}")
         return pd.DataFrame()
 
 # --- MATH ENGINE ---
