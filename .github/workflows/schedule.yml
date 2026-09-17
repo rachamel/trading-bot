@@ -2,8 +2,9 @@ name: Run Trading Bot
 
 on:
   schedule:
-    - cron: '5 0,4,8,12,16,20 * * *'
-  workflow_dispatch:
+    # Runs at minute 5, every hour (catches both 1H and 4H setups)
+    - cron: '5 * * * *'
+  workflow_dispatch: # Allows you to run it manually by clicking a button
 
 jobs:
   scan-markets:
@@ -24,5 +25,4 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
         run: python main.py
