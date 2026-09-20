@@ -1,5 +1,16 @@
 {
- "open": [],
+ "open": [
+  {
+   "symbol": "DOT-USD",
+   "dir": "LONG",
+   "entry": 1.0923000574111938,
+   "sl": 1.051460075378418,
+   "tp": 1.1231499910354614,
+   "r_target": 0.755,
+   "opened_at": "2026-09-20 11:10:00.491328+00:00",
+   "risk_dollars": 500.0
+  }
+ ],
  "closed": [],
  "peak_r": 0.0,
  "guard_flag": false
