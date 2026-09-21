@@ -1,10 +1,10 @@
 # main.py
 # =============================================================================
-# SERVERLESS QUANT BOT - PATH B: HOURLY MESSAGES + PERSISTENT MEMORY
-# Config: Z=1.5 | SL=2.5xATR(50) | TP=50-SMA static limit | tailcap |Z|<=3.5
-# Trend filter: 4H EMA200 | Scan: hourly at :05 UTC
+# SERVERLESS QUANT BOT - PATH B + GATE A (LAB4-VALIDATED)
+# Config: Z=1.5 | SL=2.5xATR(50) | TP=50-SMA static limit | 4H EMA200 trend
+# GATE A: only |Z| 1.5-2.0 (MILD) AND vol regime != HIGH (ATR50/ATR200 <= 1.2)
+# Validated: 58.2% WR | PF 1.22 | MDD -13.0R | ~4.4 trades/day
 # Memory: trade_log.json (committed back to repo by the workflow each run)
-# Validated expectation: ~55% WR | PF ~1.14 | +70R per 180 days
 # =============================================================================
 
 import requests
@@ -25,15 +25,18 @@ TELEGRAM_CHAT_ID = "5858961660"
 ACCOUNT_BALANCE = 200000.0
 RISK_PER_TRADE = 0.0025
 
-# --- LAB2-VALIDATED PARAMETERS ---
+# --- LAB2 PARAMETERS ---
 ZSCORE_ENTRY = 1.5
-TAIL_CAP = 3.5
 LOOKBACK_1H = 50
 ATR_MULTIPLIER_SL = 2.5
 TREND_EMA_4H = 200
 
+# --- GATE A PARAMETERS (LAB4-VALIDATED) ---
+Z_MILD_MAX = 2.0        # only take stretches between 1.5 and 2.0
+VOL_REGIME_MAX = 1.2    # skip HIGH volatility (ATR50 / ATR200 > 1.2)
+
 LOG_FILE = "trade_log.json"
-MIN_ASSET_SAMPLE = 8   # per-asset stats need >=8 trades (small samples lie)
+MIN_ASSET_SAMPLE = 8
 
 ALL_PAIRS = [
     "EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "USDCAD=X", "AUDUSD=X", "NZDUSD=X",
@@ -89,7 +92,7 @@ def get_data(symbol):
         print(f"[YF] {symbol}: {e}")
         return None, None
 
-# --- SIGNAL ENGINE (Lab2 final config) ---
+# --- SIGNAL ENGINE (Lab2 config + Gate A) ---
 def evaluate(symbol, df1, df4):
     if df1 is None or df4 is None: return None
     c = df1['close']
@@ -100,13 +103,20 @@ def evaluate(symbol, df1, df4):
     tr = np.maximum(df1['high'] - df1['low'],
                     np.maximum(abs(df1['high'] - pc), abs(df1['low'] - pc)))
     atr = tr.rolling(LOOKBACK_1H).mean()
+    atr_long = tr.rolling(200).mean()          # for volatility regime (Gate A)
     ema4 = df4['close'].ewm(span=TREND_EMA_4H, adjust=False).mean()
     uptrend = df4['close'].iloc[-1] > ema4.iloc[-1]
     downtrend = df4['close'].iloc[-1] < ema4.iloc[-1]
     zl, zp = z.iloc[-1], z.iloc[-2]
     a = atr.iloc[-1]
+    al = atr_long.iloc[-1]
     if pd.isna(zl) or pd.isna(zp) or pd.isna(a) or a <= 0: return None
-    if abs(zl) > TAIL_CAP: return None
+
+    # --- GATE A, PART 1: volatility regime must not be HIGH ---
+    if pd.isna(al) or al <= 0 or (a / al) > VOL_REGIME_MAX: return None
+    # --- GATE A, PART 2: only MILD stretches (|Z| between 1.5 and 2.0) ---
+    if abs(zl) >= Z_MILD_MAX: return None
+
     entry = c.iloc[-1]
     risk_dist = ATR_MULTIPLIER_SL * a
     tp_price = sma.iloc[-1]
@@ -140,7 +150,7 @@ def book_open_trades(log):
         for t in trades:
             opened = pd.Timestamp(t["opened_at"])
             if opened.tz is None: opened = opened.tz_localize('UTC')
-            start = opened.floor('h') + timedelta(hours=1)   # check from next full candle
+            start = opened.floor('h') + timedelta(hours=1)
             booked = False
             for ts, row in raw[raw.index >= start].iterrows():
                 if t["dir"] == "LONG":
@@ -194,12 +204,10 @@ def rolling40_wr(log):
 def main():
     log = load_log()
     now = pd.Timestamp.now(tz='UTC')
-    print("🤖 Path B scan + memory update...")
+    print("🤖 Path B + Gate A scan...")
 
-    # 1) Book results on open trades
     book_open_trades(log)
 
-    # 2) Scan for new signals
     scanned = []
     for pair in ALL_PAIRS:
         df1, df4 = get_data(pair)
@@ -213,9 +221,9 @@ def main():
                 for t in log["open"] + log["closed"]}
     added = []
     for s in scanned:
-        if (s["symbol"], hour_key) in existing: continue   # no duplicates
+        if (s["symbol"], hour_key) in existing: continue
         msg = (
-            f"⏱️ *Model:* 1H IN & OUT (Lab2 config)\n"
+            f"⏱️ *Model:* 1H IN & OUT (Gate A config)\n"
             f"📊 *Asset:* `{s['symbol']}`\n"
             f"🧭 *Direction:* {s['direction']}\n"
             f"🎯 *Entry:* ~`{fmt(s['entry'], s['symbol'])}` (market)\n"
@@ -223,7 +231,7 @@ def main():
             f"💰 *Take Profit:* `{fmt(s['tp'], s['symbol'])}` (50-SMA limit)\n"
             f"📐 *Target:* +{s['r_target']:.2f}R\n\n"
             f"🛡️ *Risk:* `${risk_dollars}`\n"
-            f"🧠 *Reason:* 1H Z crossed to {s['z']:.2f} | 4H trend aligned | tail OK\n"
+            f"🧠 *Reason:* Z crossed to {s['z']:.2f} (MILD) | vol OK | 4H trend aligned\n"
             f"⚠️ Set SL+TP as bracket immediately. Never widen the stop."
         )
         send_telegram(msg)
@@ -232,7 +240,6 @@ def main():
                             "opened_at": str(now), "risk_dollars": risk_dollars})
         added.append(s)
 
-    # 3) Guardrail monitor
     cum_r = sum(t["r"] for t in log["closed"])
     log["peak_r"] = max(log.get("peak_r", 0.0), cum_r)
     dip_pct = (log["peak_r"] - cum_r) * RISK_PER_TRADE * 100
@@ -241,7 +248,6 @@ def main():
         log["guard_flag"] = True
     if dip_pct < 12: log["guard_flag"] = False
 
-    # 4) Hourly status card (every hour, as requested)
     day = window_stats(log, 1)
     day_line = (f"Last 24h: {day['r']:+.2f}R (${day['usd']:+,.0f}) | {day['w']}W/{day['l']}L"
                 if day else "Last 24h: flat | 0 closed")
@@ -253,7 +259,6 @@ def main():
         f"Cumulative: {cum_r:+.1f}R | Peak dip: -{dip_pct:.1f}%\n"
         f"Next scan: {(now + timedelta(hours=1)):%H:%M} UTC")
 
-    # 5) Daily recap at 20:05 UTC + Weekly recap on Sundays
     if now.hour == 20:
         lines = [f"📊 *DAILY RECAP (24h) — {now:%Y-%m-%d}*"]
         if day:
@@ -268,7 +273,7 @@ def main():
                          (" ⚠️ below 45% — review" if r40 < 45 else " — OK"))
         send_telegram("\n".join(lines))
 
-        if now.weekday() == 6:  # Sunday
+        if now.weekday() == 6:
             w = window_stats(log, 7)
             lines = ["🗓️ *WEEKLY RECAP (7 days)*"]
             if w:
