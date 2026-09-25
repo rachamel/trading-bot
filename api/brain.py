@@ -165,12 +165,15 @@ def replay(size, rules, risk_pct, months=4, pairs=None):
     """Run the exact Gate A engine over the last N months of 1h candles and apply prop rules.
     rules = {target_pct, daily_pct, total_pct, min_days}. Returns the completed run."""
     days = min(int(months * 30), 720)
+    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=days)
     data = {}
     for s in (pairs or ALL_PAIRS):
         raw = get_history(s, f"{days}d")
         if raw is None or len(raw) < 260:
             continue
-        f = build_features(raw).dropna(subset=["z", "sma", "atr", "atr_long", "trend"])
+        f = build_features(raw)
+        f = f[f.index >= cutoff]  # yfinance can return MORE than requested (165d for "120d") — honor the window exactly
+        f = f.dropna(subset=["z", "sma", "atr", "atr_long", "trend"])
         f["z_prev"] = f["z"].shift(1)
         recs = {}
         for ts, row in f.iterrows():
@@ -258,7 +261,7 @@ def replay(size, rules, risk_pct, months=4, pairs=None):
     return {
         "status": status, "reason": reason,
         "size": size, "risk_pct": risk_pct, "rules": rules,
-        "balance": round(balance, 2), "profit": round(balance - size, 2),
+        "balance": round(balance, 2), "peak": round(peak, 2), "profit": round(balance - size, 2),
         "days": elapsed, "n_trades": len(closed) + len(open_trades),
         "winrate": round(100 * len(wins) / len(closed), 1) if closed else None,
         "pf": round(gw / gl, 2) if gl > 0 else (99.9 if gw > 0 else None),

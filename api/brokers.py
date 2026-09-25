@@ -76,7 +76,7 @@ def ct_auth_url(client_id, redirect_uri, scope="trading"):
 def ct_exchange_code(client_id, secret, code, redirect_uri):
     """OAuth2 authorization-code swap — the flow a real cTrader connection uses."""
     r = requests.post(
-        f"{CT_AUTH_BASE}/apps/auth",
+        f"{CT_AUTH_BASE}/apps/token",
         data={"grant_type": "authorization_code", "code": code,
               "client_id": client_id, "client_secret": secret, "redirect_uri": redirect_uri},
         timeout=30,
@@ -88,7 +88,7 @@ def ct_exchange_code(client_id, secret, code, redirect_uri):
 
 def ct_refresh(client_id, secret, refresh_token):
     r = requests.post(
-        f"{CT_AUTH_BASE}/apps/auth",
+        f"{CT_AUTH_BASE}/apps/token",
         data={"grant_type": "refresh_token", "refresh_token": refresh_token,
               "client_id": client_id, "client_secret": secret},
         timeout=30,
@@ -110,7 +110,7 @@ def ct_validate(client_id, secret, account_id=None):
     """Validate the app credentials (client credentials grant gives app-level access)."""
     guard = _live_guard("cTrader connection")
     r = requests.post(
-        f"{CT_AUTH_BASE}/apps/auth",
+        f"{CT_AUTH_BASE}/apps/token",
         data={"grant_type": "client_credentials", "client_id": client_id,
               "client_secret": secret, "scope": "trading"},
         timeout=30,

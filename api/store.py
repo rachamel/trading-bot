@@ -101,6 +101,10 @@ def init():
     with _lock, db() as c:
         for stmt in (SCHEMA_PG if PG else SCHEMA_SQLITE):
             c.execute(stmt)
+        try:
+            c.execute("ALTER TABLE challenge ADD COLUMN reason TEXT")  # migration for DBs created before v1.1
+        except Exception:
+            pass  # column already exists
         c.execute(q("INSERT INTO settings(key,value) VALUES ('telegram_enabled','true') ON CONFLICT (key) DO NOTHING"))
         c.execute(q("INSERT INTO settings(key,value) VALUES ('default_risk_pct','0.25') ON CONFLICT (key) DO NOTHING"))
         c.execute(q("INSERT INTO settings(key,value) VALUES ('default_mode','replay') ON CONFLICT (key) DO NOTHING"))
@@ -161,11 +165,11 @@ def latest_challenge():
         return _row(c.execute(q("SELECT * FROM challenge ORDER BY id DESC LIMIT 1")).fetchone())
 
 
-def complete_challenge(cid, status, balance, peak_balance=None):
+def complete_challenge(cid, status, balance, peak_balance=None, reason=None):
     with _lock, db() as c:
         c.execute(
-            q("UPDATE challenge SET status=%s, balance=%s, peak_balance=COALESCE(%s, peak_balance), ended_at=%s WHERE id=%s"),
-            (status, balance, peak_balance, _now(), cid),
+            q("UPDATE challenge SET status=%s, balance=%s, peak_balance=COALESCE(%s, peak_balance), ended_at=%s, reason=%s WHERE id=%s"),
+            (status, balance, peak_balance, _now(), reason, cid),
         )
 
 

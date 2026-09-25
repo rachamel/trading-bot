@@ -1120,7 +1120,7 @@ svg.ico{width:18px;height:18px}
     var body = $('#pastBody');
     if(!body) return;
     body.innerHTML = PAST.map(function(p){
-      var label = p.result === 'passed' ? 'Passed' : (p.result === 'breached' ? 'Breached' : p.result.charAt(0).toUpperCase() + p.result.slice(1));
+      var label = p.result === 'passed' ? 'Passed' : (p.result === 'breached' ? ('Breached' + (p.reason ? ' · ' + p.reason : '')) : p.result.charAt(0).toUpperCase() + p.result.slice(1));
       var cls = p.result === 'passed' ? 'pos' : 'neg';
       return '<tr>' +
         '<td data-label="Date"><span class="od-nowrap">' + p.date + '</span></td>' +
@@ -1600,7 +1600,7 @@ svg.ico{width:18px;height:18px}
       PAST = s.challenges.map(function(c){
         return {date: String(c.started_at || c.ended_at || '').slice(0, 10),
                 tier: '$' + Math.round(c.size / 1000) + 'K',
-                result: c.status, days: c.days || 0,
+                result: c.status, reason: c.reason, days: c.days || 0,
                 r: (c.r_total >= 0 ? '+' : '') + (c.r_total || 0) + 'R'};
       });
       renderPast();

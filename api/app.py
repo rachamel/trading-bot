@@ -90,9 +90,10 @@ def _summary(ch):
     return {
         "id": ch["id"], "size": size, "risk_pct": ch["risk_pct"], "mode": ch["mode"],
         "rules": rules, "status": ch["status"],
+        "reason": ch.get("reason"),
         "balance": round(ch["balance"], 2), "peak_balance": round(ch["peak_balance"], 2),
         "profit": round(profit, 2),
-        "progress_pct": round(100 * profit / target_amt, 1) if target_amt > 0 else 0,
+        "progress_pct": min(100.0, round(100 * profit / target_amt, 1)) if target_amt > 0 else 0,
         "days": days, "n_trades": len(closed) + len(open_),
         "winrate": round(100 * len(wins) / len(closed), 1) if closed else None,
         "pf": round(gw / gl, 2) if gl > 0 else (99.9 if gw > 0 else None),
@@ -149,7 +150,7 @@ def arm_challenge(body: ChallengeIn):
         for t in run["open_left"]:
             store.add_trade(cid, t)
         status = {"passed": "passed", "breached": "breached"}.get(run["status"], "expired")
-        store.complete_challenge(cid, status, run["balance"], run["balance"])
+        store.complete_challenge(cid, status, run["balance"], run.get("peak", run["balance"]), run.get("reason"))
         store.backdate_start(cid, run["days"])
         telegram.notify(
             f"⚡ *Replay complete* — ${body.size:,.0f} @ {body.risk_pct}% risk\n"
@@ -213,7 +214,7 @@ def scan():
     elif rules.get("total_pct") and (peak - balance) >= size * rules["total_pct"] / 100:
         breached = "total drawdown limit"
     if breached:
-        store.complete_challenge(ch["id"], "breached", balance)
+        store.complete_challenge(ch["id"], "breached", balance, None, f"{breached} — balance ${balance:,.0f}")
         telegram.notify(f"⛔ *CHALLENGE BREACHED* — {breached}. Balance ${balance:,.0f}. Engine paused for this run.")
         result["challenge_status"] = "breached"
         return result
@@ -251,7 +252,7 @@ def scan():
     profit = balance - size
     days = (now - datetime.fromisoformat(ch["started_at"])).days if ch.get("started_at") else 0
     if profit >= size * rules.get("target_pct", 10) / 100 and days >= int(rules.get("min_days", 5)):
-        store.complete_challenge(ch["id"], "passed", balance)
+        store.complete_challenge(ch["id"], "passed", balance, None, f"target reached in {days}d")
         telegram.notify(f"🎉 *CHALLENGE PASSED* — target reached in {days}d. Balance ${balance:,.0f}.")
         result["challenge_status"] = "passed"
 
