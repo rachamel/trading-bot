@@ -68,7 +68,11 @@ SCHEMA_PG = [
 def db():
     """One connection per operation: commit on success, rollback on error, always close."""
     if PG:
-        conn = psycopg.connect(PG_URL, row_factory=dict_row)
+        conn = psycopg.connect(
+            PG_URL,
+            row_factory=dict_row,
+            prepare_threshold=None,  # safe under PgBouncer transaction pooling (pooled Neon string)
+        )
     else:
         import sqlite3
         conn = sqlite3.connect(DB_PATH, timeout=30)
