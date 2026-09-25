@@ -1,0 +1,186 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gate a — THE TRADING DESK · 4H BOT Prop Terminal</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0c0c10;background-image:radial-gradient(rgba(255,255,255,.09) 1px,transparent 1.4px);background-size:26px 26px;color:#ececf1;font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;padding:34px 22px;min-height:100vh}
+.wrap{max-width:1220px;margin:0 auto;background:radial-gradient(900px 320px at 88% -40px,rgba(168,85,247,.22),transparent 60%),linear-gradient(#141419,#121218);border:1px solid #26262f;border-radius:24px;padding:26px 30px 20px;box-shadow:0 20px 80px rgba(0,0,0,.6)}
+/* ---- top bar (gate a contents / purple skin) ---- */
+.top{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{display:flex;gap:13px;align-items:center}
+.ric{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 18px rgba(139,92,246,.5);flex:none;color:#e9d5ff}
+.bt{font-size:24px;font-weight:800;letter-spacing:-.3px;line-height:1.1;white-space:nowrap}.bt .pa{color:#b794ff;font-weight:400}
+.desk{font-size:10px;letter-spacing:.24em;color:#8f8fa0;font-weight:600;margin-left:12px;padding-left:12px;border-left:1px solid #34343e;white-space:nowrap}
+.mbadge{display:inline-block;vertical-align:middle;margin-left:10px;font-size:11px;font-weight:500;color:#b6b6c0;border:1px solid #34343e;background:#1d1d24;border-radius:999px;padding:5px 13px;white-space:nowrap}
+.nav{display:flex;gap:10px;flex-wrap:wrap}
+.nav button{background:#191921;border:1px solid #2a2a34;color:#cfcfd8;font-size:13px;font-weight:500;padding:10px 18px;border-radius:12px;cursor:pointer}
+.nav button.on{background:linear-gradient(90deg,#a855f7,#6366f1);border-color:transparent;color:#fff;font-weight:700;box-shadow:0 6px 26px rgba(139,92,246,.45)}
+.right{display:flex;gap:10px;align-items:center}
+.pill{font-size:12px;font-weight:800;letter-spacing:.06em;border-radius:999px;padding:10px 18px;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.live{color:#5eead4;border:1px solid rgba(45,212,191,.45);background:rgba(13,60,55,.45);box-shadow:0 0 22px rgba(45,212,191,.35),inset 0 0 12px rgba(45,212,191,.12)}
+.live i{width:8px;height:8px;border-radius:50%;background:#34d399;box-shadow:0 0 8px #34d399}
+.chal{color:#e9d5ff;border:1px solid rgba(192,132,252,.55);background:rgba(88,28,135,.28);box-shadow:0 0 22px rgba(168,85,247,.3)}
+.avatar{width:30px;height:30px;border-radius:50%;background:#23232c;border:1px solid #34343e;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#d8b4fe}
+/* ---- sub bar ---- */
+.subbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid #23232b;border-bottom:1px solid #23232b;margin:18px -30px 0;padding:10px 30px;font-size:12px;color:#9a9aa8;font-family:ui-monospace,monospace}
+.gd{width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 8px #4ade80;display:inline-block;margin-right:8px;vertical-align:1px}
+.gd.dim{background:#6d6d7a;box-shadow:none}
+.subsep{margin:0 10px;color:#3a3a44}
+/* ---- main ---- */
+.main{padding:26px 0 4px}
+.eyebrow{font-size:11px;letter-spacing:.24em;color:#8f8fa0;font-weight:600;margin-bottom:12px}
+.hero{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+h1{font-size:36px;font-weight:650;letter-spacing:-1px;line-height:1.05}
+.sub2{color:#9a9aa8;font-size:14px;margin-top:9px;max-width:640px}
+.ref{background:#1d1d25;border:1px solid #2d2d37;border-radius:13px;padding:12px 16px;display:flex;gap:12px;align-items:center;min-width:250px}
+.cmd{width:34px;height:34px;border:1px solid #34343e;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#b6b6c0;font-size:15px;flex:none;background:#17171e}
+.ref small{display:block;font-size:9.5px;letter-spacing:.22em;color:#8f8fa0;margin-bottom:5px;font-weight:600}
+.ref select{background:transparent;border:0;color:#fff;font-size:13.5px;font-weight:700;cursor:pointer;font-family:ui-monospace,monospace;outline:0}
+.ref select option{color:#000;background:#fff}
+/* ---- 4-stat strip ---- */
+.strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.cell{background:#1d1d25;border:1px solid #2d2d37;border-radius:13px;padding:18px 18px 16px;position:relative}
+.k{font-size:10px;letter-spacing:.16em;color:#8f8fa0;font-weight:600}
+.ico{position:absolute;top:18px;right:18px;color:#8f8fa0;font-size:14px}
+.v{font-size:29px;font-weight:800;margin:10px 0 8px;letter-spacing:-.5px}
+.v small{font-size:14px;color:#9a9aa8;font-weight:500}
+.cap{font-size:11.5px;color:#8f8fa0;font-family:ui-monospace,monospace;line-height:1.5}
+.mint{color:#4ade80}
+/* ---- cards ---- */
+.grid2{display:grid;grid-template-columns:1.9fr 1fr;gap:18px}
+.card{background:#17171e;border:1px solid #292932;border-radius:18px;padding:22px}
+.chead{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:10px}
+.kl{font-size:10.5px;letter-spacing:.2em;color:#8f8fa0;font-weight:600;display:flex;align-items:center;gap:8px}
+.kl .pd{width:8px;height:8px;border-radius:50%;background:#c084fc;box-shadow:0 0 8px #c084fc}
+h3{font-size:20px;font-weight:700;margin:8px 0 4px;letter-spacing:-.2px}
+.d{font-size:12.5px;color:#9a9aa8;font-family:ui-monospace,monospace}
+.ret{display:flex;justify-content:space-between;align-items:flex-end;margin:18px 0 6px}
+.big{font-size:29px;font-weight:800;margin-top:4px}
+.smallr{text-align:right;font-size:11px;color:#8f8fa0;line-height:1.7;font-family:ui-monospace,monospace}
+.select{background:#131318;border:1px solid #2c2c36;border-radius:11px;color:#ececf1;font-size:12.5px;padding:8px 32px 8px 12px;appearance:none;outline:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' fill='none' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;cursor:pointer;font-family:ui-monospace,monospace}
+.tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.tl{font-size:11px;font-weight:800;letter-spacing:.05em;border-radius:999px;padding:6px 13px;font-family:ui-monospace,monospace}
+.t-live{color:#5eead4;border:1px solid rgba(45,212,191,.4);background:rgba(13,60,55,.4)}
+.t-rep{color:#d8b4fe;border:1px solid rgba(192,132,252,.45);background:rgba(88,28,135,.3)}
+.t-ch{color:#b6b6c0;border:1px solid #34343e;background:#1d1d24}
+.t-ch b{color:#c084fc}
+/* ---- safety net bars ---- */
+.brow{margin:16px 0}
+.btop{display:flex;justify-content:space-between;color:#d7d7df;margin-bottom:9px;font-size:13px}
+.btop .mono{font-family:ui-monospace,monospace;color:#9a9aa8;font-size:12px}
+.track{height:5px;background:repeating-linear-gradient(90deg,#2e2e38 0 5px,transparent 5px 10px);border-radius:3px}
+.fill{height:5px;background:linear-gradient(90deg,#34d399,#a855f7);border-radius:3px;box-shadow:0 0 10px rgba(139,92,246,.4)}
+.creative{margin-top:16px;border:1px solid rgba(192,132,252,.35);background:rgba(139,92,246,.09);border-radius:13px;padding:14px 16px;display:flex;gap:13px;align-items:flex-start}
+.zap{width:36px;height:36px;flex:none;border-radius:10px;border:1px solid rgba(192,132,252,.4);background:rgba(139,92,246,.12);display:flex;align-items:center;justify-content:center;font-size:16px}
+.creative p{font-size:12.5px;line-height:1.6;color:#e2e2e9}.creative b{color:#fff}.creative .g{color:#4ade80;font-family:ui-monospace,monospace}
+/* ---- feed / tables / misc ---- */
+.feed div{background:#131318;border:1px solid #2a2a34;border-radius:11px;padding:11px 13px;font-size:12.5px;margin:9px 0;color:#d9d9e1;font-family:ui-monospace,monospace}
+.feed div.dash{border-style:dashed;color:#8f8fa0}
+.twrap{border:1px solid #2a2a34;border-radius:14px;overflow:hidden;margin-top:14px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;color:#9a9aa8;font-weight:500;font-size:11.5px;padding:12px 15px;background:rgba(255,255,255,.012);letter-spacing:.04em}
+td{padding:11.5px 15px;border-top:1px solid #23232c;color:#d9d9e1;font-family:ui-monospace,monospace;font-size:12px}
+td:first-child{font-family:Inter,sans-serif;font-weight:600}
+tr.hl td{background:rgba(139,92,246,.2);color:#fff}
+.stat4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat{background:#1d1d25;border:1px solid #2d2d37;border-radius:13px;padding:15px 16px}
+.stat small{font-size:10px;letter-spacing:.14em;color:#8f8fa0;font-weight:600}
+.stat .sv{font-size:20px;font-weight:800;margin-top:7px}
+.bar{height:8px;background:#26262e;border-radius:99px;margin-top:10px;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,#34d399,#a855f7);border-radius:99px}
+.vbadge{font-size:11px;color:#d8b4fe;border:1px solid rgba(192,132,252,.5);background:rgba(88,28,135,.25);border-radius:9px;padding:6px 12px;font-family:ui-monospace,monospace;white-space:nowrap}
+.input{width:100%;background:#131318;border:1px solid #2c2c36;border-radius:11px;color:#ececf1;font-size:12.5px;padding:11px 13px;outline:0;margin-top:8px}
+.btn{border:0;border-radius:11px;padding:11px 18px;font-weight:800;font-size:12.5px;cursor:pointer}
+.b1{background:linear-gradient(90deg,#a855f7,#6366f1);color:#fff;box-shadow:0 6px 22px rgba(139,92,246,.4)}
+.b2{background:#23232c;color:#d5d5dd;border:1px solid #34343e}
+.btnrow{display:flex;gap:10px;margin-top:12px}
+.note{margin-top:12px;font-size:11.5px;line-height:1.7;color:#8f8fa0;font-family:ui-monospace,monospace}
+.foot{display:flex;justify-content:space-between;align-items:center;margin-top:20px;padding-top:16px;border-top:1px solid #23232b;font-size:11px;color:#6d6d7a;font-family:ui-monospace,monospace}
+.foot .g{color:#4ade80}.foot b{color:#c084fc;font-weight:600}
+.scr{display:none}.scr.on{display:block;animation:fade .2s}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
+@media(max-width:980px){.grid2{grid-template-columns:1fr}.strip{grid-template-columns:1fr 1fr}.desk{display:none}}
+</style></head><body><div class="wrap">
+<!-- TOP -->
+<div class="top">
+<div class="brand"><div class="ric">∿</div><div class="bt">gate<span class="pa">a</span><span class="desk">THE TRADING DESK</span><span class="mbadge">MOCKUP v1 — VERCEL + RENDER</span></div></div>
+<div class="nav" id="nav"><button data-i="0" class="on">Overview</button><button data-i="1">Positions</button><button data-i="2">History</button><button data-i="3">Insights</button><button data-i="4">Settings</button></div>
+<div class="right"><span class="pill live"><i></i>LIVE SCAN :45m</span><span class="pill chal" id="chalPill">200K CHALLENGE</span><span class="avatar">G</span></div>
+</div>
+<!-- SUB BAR -->
+<div class="subbar"><span><span class="gd"></span><b style="color:#c9c9d2;letter-spacing:.14em;font-weight:600">ENGINE CONNECTED</b><span class="subsep">/</span>Gate A · Mean reversion · Z=1.5 | SL 2.5×ATR | TP 50-SMA | 4H EMA200<span class="subsep">•</span><span class="mint">58.2% WR / PF 1.22</span></span><span><span class="gd dim"></span>0 open · 100% win 🔒</span></div>
+<div class="main">
+<div class="eyebrow">YOUR EDGE. WITH PERSPECTIVE.</div>
+<div class="hero"><div><h1 id="headline">Keep the bigger picture.</h1><div class="sub2" id="subline">The whole picture. The edge, the uncertainty, the guardrails.</div></div>
+<div class="ref"><div class="cmd">⌘</div><div><small>REFERENCE ACCOUNT</small><select id="acc" onchange="chg()"><option value="5000">$5,000 · Model</option><option value="10000">$10,000 · Model</option><option value="25000">$25,000 · Model</option><option value="50000">$50,000 · Model</option><option value="100000">$100,000 · Model</option><option value="200000" selected>$200,000 · Model</option></select></div></div></div>
+<!-- 4-STAT STRIP -->
+<div class="strip">
+<div class="cell"><div class="k">EXPECTED EDGE</div><div class="ico">◭</div><div class="v mint">+0.092<small> R</small></div><div class="cap">↗ Per trade · backtest prior</div></div>
+<div class="cell"><div class="k">HISTORICAL WIN RATE</div><div class="ico">∿</div><div class="v">58.2<small> %</small></div><div class="cap">Backtest, not your live results</div></div>
+<div class="cell"><div class="k">AVERAGE WIN / LOSS</div><div class="ico">⇅</div><div class="v">0.88<small> / 1 R</small></div><div class="cap">Small wins. Controlled losses.</div></div>
+<div class="cell"><div class="k">SIGNAL FREQUENCY</div><div class="ico">⛛</div><div class="v">4.4<small> / day</small></div><div class="cap">Historical average across pairs</div></div>
+</div>
+<!-- SCREENS -->
+<div class="scr on" id="s0"><div class="grid2">
+<div class="card"><div class="chead"><div class="kl"><span class="pd"></span>THE LONG VIEW</div><select class="select"><option>90 days</option><option>30 days</option></select></div>
+<h3>Your edge, over time.</h3><div class="d">Monte Carlo from the engine</div>
+<div class="ret"><div><div class="d" style="font-size:11px">Engine expected return</div><div class="big mint">+11.1 % <span style="font-size:15px">↗</span></div></div><div class="smallr"><span id="refLab">$200,000 reference account</span><br>0.25% nominal risk / trade</div></div>
+<svg viewBox="0 0 600 180" style="width:100%;height:170px;margin-top:6px"><defs><pattern id="h" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><line x1="0" y1="0" x2="0" y2="6" stroke="rgba(168,85,247,.35)" stroke-width="1"/></pattern></defs>
+<g stroke="#23232c" stroke-dasharray="4 4"><line x1="0" y1="30" x2="600" y2="30"/><line x1="0" y1="80" x2="600" y2="80"/><line x1="0" y1="130" x2="600" y2="130"/></g>
+<text x="0" y="25" fill="#777" font-size="11" font-family="ui-monospace,monospace">18%</text><text x="0" y="75" fill="#777" font-size="11" font-family="ui-monospace,monospace">12%</text><text x="0" y="125" fill="#777" font-size="11" font-family="ui-monospace,monospace">6%</text>
+<path d="M0,175 Q200,170 350,110 T600,45 L600,180 L0,180 Z" fill="url(#h)"/><path d="M0,175 Q200,170 350,120 T600,95" fill="none" stroke="#e8e8ec" stroke-width="1.6"/></svg>
+<div class="tags"><span class="tl t-live">LIVE 1H</span><span class="tl t-rep">REPLAY ⚡ 100x</span><span class="tl t-ch">Challenge: <b id="chLab">$200K → target $16,000</b></span></div>
+<div class="note">Equity: $200,000 → $200,933 (+$933) · DOT-USD +0.755R · SOL-USD +1.112R · Peak dip -0.4% · Day 2/5</div></div>
+<div class="card"><div class="chead"><div class="kl"><span class="pd"></span>CAPITAL COMES FIRST</div><span style="font-size:15px">🛡</span></div>
+<h3>Your safety net</h3><div class="d"><span class="gd"></span>Engine connected · pause at -18% dip from peak R</div>
+<div class="brow"><div class="btop"><span>Daily loss allowance</span><span class="mono">— / $10,000</span></div><div class="track"><div class="fill" style="width:4%"></div></div></div>
+<div class="brow"><div class="btop"><span>Total drawdown</span><span class="mono">— / $20,000</span></div><div class="track"><div class="fill" style="width:2%"></div></div></div>
+<div class="brow"><div class="btop"><span>Effective risk per trade ⓘ</span><span class="mono">0.25%</span></div><div class="track"><div class="fill" style="width:5%"></div></div></div>
+<div class="creative"><div class="zap">⚡</div><p><b>Pass Predictor</b> — Monte Carlo of your current run: <span class="g">73% to pass in ~14 days</span>. <b>Guardrail Auto-Pause</b> mirrors main.py dip logic — the desk pauses entries automatically, you never break a rule.</p></div></div></div></div>
+
+<div class="scr" id="s1"><div class="grid2">
+<div class="card"><div class="chead"><div class="kl"><span class="pd"></span>LIVE POSITIONS</div><span class="vbadge">REPLAY 1x–100x · 42:10</span></div>
+<h3>Watch the bot take trades.</h3><div class="d">Same Gate A brain: |Z| 1.5–2.0 MILD · vol regime OK · 4H EMA200 aligned</div>
+<div class="feed"><div>🟢 LONG SOL-USD @108.11 · SL 105.56 · TP 110.94 (+1.11R tgt) — Z -1.62 MILD | vol OK — 11:00 UTC</div><div>✅ CLOSED SOL-USD TP <span class="mint">+1.112R (+$556)</span> in 8h — 00:00 UTC</div><div>🟢 LONG DOT-USD @1.0923 · SL 1.0514 · TP 1.1231 (+0.75R tgt) — Sep 20</div><div>✅ CLOSED DOT-USD TP <span class="mint">+0.755R (+$377)</span> — Sep 20 16:00</div><div class="dash">⏳ Scanning… EURUSD Z 0.8 (skip) · BTC-USD vol HIGH (Gate A block) · next 1H close 42:10</div></div></div>
+<div class="card"><div class="chead"><div class="kl"><span class="pd"></span>OPEN TRADES</div><span class="vbadge">bracket SL+TP</span></div>
+<h3>Flat — 0 open.</h3><div class="d">Brackets auto-appear here. In real-prop mode the same card fires the MT5 / cTrader order.</div>
+<div class="twrap"><table><tr><th>Symbol</th><th>Dir</th><th>Entry</th><th>SL</th><th>TP</th><th>R tgt</th></tr><tr><td colspan="6" style="text-align:center;color:#6d6d7a">Waiting next 1H close</td></tr></table></div>
+<div class="btnrow"><button class="btn b1">⏸ Pause Bot</button><button class="btn b2">Force Scan</button></div></div></div></div>
+
+<div class="scr" id="s2">
+<div class="stat4"><div class="stat"><small>TOTAL TRADES</small><div class="sv">2</div></div><div class="stat"><small>WINRATE</small><div class="sv mint">100%</div></div><div class="stat"><small>PROFIT FACTOR</small><div class="sv">99.9</div></div><div class="stat"><small>AVG R · DAYS</small><div class="sv">+0.93R · 2/5d</div></div></div>
+<div class="card"><div class="chead"><div class="kl"><span class="pd"></span>FULL HISTORY — EVERY TRADE, NOTHING HIDDEN</div><span class="vbadge">CSV · verify link · share card</span></div>
+<div class="twrap"><table><tr><th>Closed</th><th>Symbol</th><th>Dir</th><th>Entry → Exit</th><th>R</th><th>$</th><th>Result</th><th>Hold</th></tr>
+<tr><td>Sep 20 16:00</td><td>DOT-USD</td><td>LONG</td><td>1.0923 → 1.1231</td><td class="mint">+0.755</td><td>+$377</td><td>TP</td><td>5h</td></tr>
+<tr><td>Sep 21 00:00</td><td>SOL-USD</td><td>LONG</td><td>108.11 → 110.94</td><td class="mint">+1.112</td><td>+$556</td><td>TP</td><td>8h</td></tr></table></div>
+<div class="note">Profit +$933 / $16,000 · Live WR 100% vs prior 58.2% · Assets with <8 trades hidden — small samples lie.</div></div></div>
+
+<div class="scr" id="s3"><div class="grid2">
+<div class="card"><div class="chead"><div class="kl"><span class="pd"></span>INSIGHTS</div><span class="vbadge">Monte Carlo · 10,000 runs</span></div>
+<h3>Will it pass?</h3><div class="d">58.2% WR · PF 1.22 · 4.4 trades/day · 0.25% risk</div>
+<div class="big mint" style="font-size:44px;margin-top:14px">73% <span style="font-size:14px;color:#9a9aa8;font-weight:500">to pass in ~14 days</span></div>
+<div class="note">Median: +6.2R (+$3,100 on $200K) in 30d · 5th percentile: -8R · 95th: +14R. Replay mode compresses the full challenge to ~6 min.</div></div>
+<div class="card"><div class="chead"><div class="kl"><span class="pd"></span>PER-ASSET EDGE</div><span class="vbadge">≥8 trades shown</span></div>
+<h3>Edge by pair.</h3><div class="d">Borrowed from your weekly recap logic</div>
+<div class="twrap"><table><tr><th>Asset</th><th>n</th><th>R</th></tr><tr><td>SOL-USD</td><td>1</td><td class="mint">+1.11</td></tr><tr><td>DOT-USD</td><td>1</td><td class="mint">+0.75</td></tr></table></div>
+<div class="note">26 assets scanned hourly · FX · metals · crypto.</div></div></div></div>
+
+<div class="scr" id="s4"><div class="grid2">
+<div class="card"><div class="chead"><div class="kl"><span class="pd"></span>REAL PROP · MT4 / MT5</div><span class="vbadge">MetaAPI · REST + WS</span></div>
+<h3>Same brain, real orders.</h3><div class="d">Bracket SL/TP + 0.25% sizing · Render runs the brain hourly</div>
+<input class="input" placeholder="MetaAPI cloud token"><div style="display:flex;gap:8px"><input class="input" placeholder="Login 821xxx"><input class="input" placeholder="Password" type="password"><input class="input" placeholder="FTMO-Server"></div>
+<div class="btnrow"><button class="btn b1">Connect & Deploy</button><button class="btn b2">Dry-run</button></div>
+<div class="note">Render free can't run a MT terminal → MetaAPI.cloud bridge. Free tier covers 1 account, hourly scan.</div></div>
+<div class="card"><div class="chead"><div class="kl"><span class="pd"></span>REAL PROP · CTRADER</div><span class="vbadge">Spotware OpenAPI · OAuth2</span></div>
+<h3>Native protobuf, no bridge fee.</h3><div class="d">E8 / FundedNext cTrader · tokens stored encrypted, auto-refresh</div>
+<div style="display:flex;gap:8px"><input class="input" placeholder="Client ID"><input class="input" placeholder="Secret" type="password"></div><input class="input" placeholder="Account ID e.g. 5423312">
+<div class="btnrow"><button class="btn b1">OAuth Login → Authorize</button><button class="btn b2">Refresh token</button></div>
+<div class="note">Kill-switch · daily-loss auto-stop · 10s Telegram cancel window · SIM / REAL / MIRROR toggle.</div></div></div></div>
+</div>
+<div class="foot"><span><span class="g">●</span> &nbsp;Connected to MT5 & cTrader prop bridges</span><span>Session ID: <b>78748803</b> &nbsp;|&nbsp; Timezone: GMT+3</span></div>
+</div>
+<script>
+const HL=['Keep the bigger picture.','Let it trade in front of you.','Every close tells the truth.','Uncertainty, quantified.','Plug the brain into real capital.'];
+const SL=['The whole picture. The edge, the uncertainty, the guardrails.','Live feed + open brackets. Replay 100x to pass in minutes.','Winrate, PF, R, days, profit — the full prop ledger.','Pass predictor + per-asset edge. Small samples hidden.','MT5 via MetaAPI + cTrader via OpenAPI OAuth2.'];
+const t=document.querySelectorAll('#nav button');
+t.forEach(b=>b.onclick=()=>{t.forEach(x=>x.classList.remove('on'));b.classList.add('on');const i=+b.dataset.i;document.querySelectorAll('.scr').forEach((d,j)=>d.classList.toggle('on',i===j));document.getElementById('headline').textContent=HL[i];document.getElementById('subline').textContent=SL[i];});
+function chg(){const v=+document.getElementById('acc').value;document.getElementById('refLab').textContent='$'+v.toLocaleString()+' reference account';document.getElementById('chLab').textContent='$'+(v/1000)+'K → target $'+(v*0.08).toLocaleString();document.getElementById('chalPill').textContent=(v/1000)+'K CHALLENGE';}
+</script></body></html>

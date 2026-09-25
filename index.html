@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><script type="application/json" data-od-external-dependencies>["https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap"]</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>4H Bot — Prop Terminal</title>
+<meta name="description" content="Prop challenge terminal for the 4H Bot strategy: account selection, rule engine and launch." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+@layer od-layout {
+  :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+
+  /* containers */
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-fill    { flex: 1 1 0; min-width: 0; }
+  .od-fixed   { flex: none; }
+  .od-grid    { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+
+  /* stacked information: each piece is its own line — never sibling inline spans */
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+  .od-tile { display: grid; grid-template-rows: auto 1fr; }
+  :where(.od-tile) > :where(*) { display: block; }
+
+  /* media keeps its intrinsic ratio by default; never a distorted or cropped
+     cover by accident. height:auto lets the ratio win over an <img height="…">
+     attribute. Cropping to a uniform box is an explicit opt-in: set --od-ratio
+     AND add .od-media-cover together (per the core rule, only where a crop is
+     deliberate — tile thumbs, decorative fills — never on full-frame content). */
+  .od-media { display: block; width: 100%; height: auto; aspect-ratio: var(--od-ratio, auto); }
+  .od-media-cover { object-fit: cover; }
+
+  /* data text only — authored copy is rewritten to its budget instead */
+  .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .od-clamp-2, .od-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .od-clamp-2 { -webkit-line-clamp: 2; }
+  .od-clamp-3 { -webkit-line-clamp: 3; }
+  .od-lines-2 { min-height: calc(2 * 1.4em); }   /* block-level reservation for a shared baseline */
+  .od-nowrap  { white-space: nowrap; }           /* 数字+单位 · 价格+起 · 日期+星期 */
+  .od-keep    { word-break: keep-all; overflow-wrap: anywhere; } /* CJK labels break at spaces / <wbr> first */
+
+  /* screen skeleton (optional): bars take their own space, the middle scrolls — no padding guessed for chrome */
+  .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+  .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+
+  /* horizontal rail: the next item peeks at the edge; trailing room survives overflow */
+  .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+             padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+  .od-rail::-webkit-scrollbar { display: none; }
+  :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
+  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+
+  .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
+  .od-touch  { min-width: 44px; min-height: 44px; }
+}
+/* /OD-LAYOUT-PRIMITIVES v1 */
+
+:root{
+  --bg:#0B0D0C;
+  --s1:#121513;
+  --s2:#171B18;
+  --s3:#1E231F;
+  --line:rgba(255,255,255,.08);
+  --line-2:rgba(255,255,255,.14);
+  --text:#ECEEEC;
+  --dim:#9BA39D;
+  --faint:#828A84;
+  --accent:#9FE3A6;
+  --accent-2:#6FCF7C;
+  --accent-dim:rgba(159,227,166,.10);
+  --accent-line:rgba(159,227,166,.30);
+  --warn:#E8C15A;
+  --danger:#E8735A;
+  --on-accent:#07170C;
+  --font-display:"Instrument Serif",Georgia,"Times New Roman",serif;
+  --font-ui:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --r-card:10px;
+  --r-ctl:8px;
+  --dur:180ms;
+  --dur-fast:140ms;
+  --ease:cubic-bezier(.2,.7,.3,1);
+  --maxw:1320px;
+  --od-gap:8px;
+  --od-rail-pad:16px;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--font-ui);font-size:16px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+h1,h2,h3,p,dl,dd,dt,figure{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,select{font:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent);color:var(--on-accent)}
+svg.ico,.brand-mark,.stat-icon,.card-icon,.callout-icon,.empty-icon,.result svg,.toast svg{
+  fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none;
+}
+svg.ico{width:18px;height:18px}
+
+/* ---------- app shell ---------- */
+.app{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;height:100vh;height:100dvh}
+.skip{position:absolute;left:-9999px}
+.skip:focus{left:16px;top:12px;z-index:60;background:var(--s2);border:1px solid var(--line-2);padding:8px 12px;border-radius:var(--r-ctl)}
+
+.topbar{border-bottom:1px solid var(--line);background:var(--bg);position:relative;z-index:20}
+.topbar-inner{max-width:var(--maxw);margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:20px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand-mark{width:22px;height:22px;color:var(--accent)}
+.brand-name{font-family:var(--font-mono);font-weight:600;letter-spacing:.02em;font-size:15px;white-space:nowrap}
+.brand-sub{font-size:10.5px;text-transform:uppercase;letter-spacing:.10em;color:var(--faint);padding-left:10px;border-left:1px solid var(--line-2);white-space:nowrap}
+.nav{display:flex;align-items:center;gap:2px;margin-left:8px;overflow-x:auto;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav-item{padding:7px 13px;border-radius:var(--r-ctl);color:var(--dim);font-size:14px;white-space:nowrap;transition:color var(--dur) var(--ease),background var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+.nav-item:hover{color:var(--text);background:rgba(255,255,255,.04)}
+.nav-item.is-active{color:var(--text);background:var(--s2);box-shadow:inset 0 0 0 1px var(--line-2)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+
+.pill{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--dim);white-space:nowrap;background:var(--s1)}
+.pill-accent{color:var(--accent);border-color:var(--accent-line);background:var(--accent-dim)}
+.pill-live{color:var(--text)}
+.dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--faint)}
+.dot-on{background:var(--accent-2)}
+.dot-pulse{background:var(--accent-2);animation:pulse 2.4s var(--ease) infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(111,207,124,.45)}70%{box-shadow:0 0 0 7px rgba(111,207,124,0)}100%{box-shadow:0 0 0 0 rgba(111,207,124,0)}}
+.icon-btn{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--r-ctl);color:var(--dim);border:1px solid transparent;transition:color var(--dur) var(--ease),background var(--dur) var(--ease),border-color var(--dur) var(--ease)}
+.icon-btn:hover{color:var(--text);background:rgba(255,255,255,.05);border-color:var(--line)}
+
+.strip{border-bottom:1px solid var(--line);background:var(--s1)}
+.strip-inner{max-width:var(--maxw);margin:0 auto;padding:9px 24px;display:flex;align-items:center;gap:10px;font-size:12px;flex-wrap:wrap}
+.strip-label{text-transform:uppercase;letter-spacing:.10em;color:var(--faint);font-size:10.5px;white-space:nowrap}
+.strip-mono{font-family:var(--font-mono);color:var(--dim);overflow-wrap:anywhere;flex:1 1 260px;min-width:0}
+.mt-16{margin-top:16px}
+.sw-warn{background:var(--warn)}
+.sw-accent{background:var(--accent)}
+.strip-right{margin-left:auto;display:flex;align-items:center;gap:8px;white-space:nowrap}
+
+.content{overflow-y:auto;overscroll-behavior:contain;min-height:0}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:34px 24px 56px}
+.view[hidden]{display:none}
+
+.card{background:var(--s1);border:1px solid var(--line);border-radius:var(--r-card);padding:18px 20px}
+
+/* ---------- hero ---------- */
+.hero{display:grid;grid-template-columns:minmax(0,1fr) 286px;gap:32px;align-items:end;padding:6px 0 30px}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--dim);margin-bottom:14px}
+.hero-title{font-family:var(--font-display);font-weight:400;font-size:clamp(34px,5vw,62px);line-height:1.03;letter-spacing:-.01em}
+.hero-sub{margin-top:16px;max-width:62ch;color:var(--dim);font-size:15.5px}
+.accent-text{color:var(--accent)}
+.hero-aside{padding:16px;display:grid;gap:10px}
+.micro{font-size:10.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--faint)}
+.micro-note{font-size:12.5px;color:var(--dim);line-height:1.5}
+.hero-aside-value{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:2px}
+.hero-aside-value strong{font-family:var(--font-mono);font-size:20px;font-weight:500;color:var(--accent)}
+.switch{width:40px;height:22px;border-radius:999px;background:var(--s3);border:1px solid var(--line-2);position:relative;transition:background var(--dur) var(--ease),border-color var(--dur) var(--ease)}
+.switch span{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--dim);transition:transform var(--dur) var(--ease),background var(--dur) var(--ease)}
+.switch[aria-checked="true"]{background:var(--accent-dim);border-color:var(--accent-line)}
+.switch[aria-checked="true"] span{transform:translateX(18px);background:var(--accent-2)}
+
+/* ---------- stats ---------- */
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:26px}
+.stat{padding:16px 18px;gap:2px;align-content:start}
+.stat-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.stat-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--faint)}
+.stat-icon{width:16px;height:16px;color:var(--faint)}
+.stat-value{font-family:var(--font-mono);font-weight:500;font-size:clamp(26px,3vw,38px);line-height:1.05;letter-spacing:-.02em;margin-top:12px}
+.stat-value .unit{font-size:.5em;color:var(--dim);margin-left:5px;font-weight:400}
+.stat-cap{font-size:12.5px;color:var(--dim);margin-top:5px}
+
+/* ---------- columns ---------- */
+.cols{display:grid;grid-template-columns:minmax(0,1.85fr) minmax(0,1fr);gap:16px;align-items:start;margin-bottom:16px}
+.col-main,.col-side{display:flex;flex-direction:column;gap:16px;min-width:0}
+.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
+.card-title{font-size:15.5px;font-weight:600;letter-spacing:.003em}
+.card-sub{font-size:12.5px;color:var(--dim);margin-top:3px}
+.card-icon{width:18px;height:18px;color:var(--faint)}
+
+/* ---------- account tiles ---------- */
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.tile{
+  gap:6px;text-align:left;padding:14px;background:var(--s2);
+  border:1px solid var(--line);border-radius:var(--r-ctl);
+  transition:border-color var(--dur) var(--ease),background var(--dur) var(--ease),box-shadow var(--dur) var(--ease);
+}
+.tile:hover{border-color:var(--line-2);background:var(--s3)}
+.tile-size{font-family:var(--font-mono);font-size:20px;font-weight:500;letter-spacing:-.01em}
+.tile-meta{font-size:11.5px;color:var(--faint);font-family:var(--font-mono)}
+.tile.is-selected{border-color:var(--accent-line);background:var(--accent-dim);box-shadow:inset 0 0 0 1px var(--accent-line)}
+.tile.is-selected .tile-size{color:var(--accent)}
+.tile.is-selected .tile-meta{color:var(--dim)}
+
+.controls{display:grid;gap:16px;margin-top:20px;padding-top:20px;border-top:1px solid var(--line)}
+.control-head{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.field-label{font-size:12.5px;color:var(--dim)}
+.tag{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--accent);border:1px solid var(--accent-line);background:var(--accent-dim);border-radius:4px;padding:2px 6px;white-space:nowrap}
+.segmented{display:inline-flex;gap:3px;padding:3px;background:var(--s2);border:1px solid var(--line);border-radius:var(--r-ctl);max-width:100%;flex-wrap:wrap}
+.segmented button{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:6px;font-size:13.5px;color:var(--dim);transition:color var(--dur) var(--ease),background var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+.segmented button:hover{color:var(--text)}
+.segmented button[aria-checked="true"]{background:var(--s3);color:var(--text);box-shadow:inset 0 0 0 1px var(--line-2)}
+.segmented button svg{width:14px;height:14px}
+.control-note{font-size:12.5px;color:var(--faint);margin-top:8px}
+.control-note strong{color:var(--text);font-family:var(--font-mono);font-weight:500}
+
+.cta-block{margin-top:22px;display:grid;gap:10px}
+.btn-primary{
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  background:var(--accent);color:var(--on-accent);font-weight:600;font-size:14.5px;
+  padding:13px 20px;border-radius:var(--r-ctl);min-height:46px;
+  transition:filter var(--dur) var(--ease),transform var(--dur) var(--ease);
+}
+.btn-primary:hover{filter:brightness(1.07)}
+.btn-primary:active{transform:translateY(1px)}
+.btn-primary[disabled]{opacity:.72;cursor:default;filter:none}
+.btn-ghost{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 18px;min-height:44px;border-radius:var(--r-ctl);border:1px solid var(--line-2);color:var(--text);font-size:14.5px;transition:background var(--dur) var(--ease)}
+.btn-ghost:hover{background:rgba(255,255,255,.05)}
+.cta-note{font-size:12.5px;color:var(--faint);text-align:center}
+
+/* ---------- guardrails ---------- */
+.guard{display:grid}
+.guard-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.guard-row:last-child{border-bottom:0}
+.guard-row dt{font-size:13px;color:var(--dim)}
+.guard-row dd{font-family:var(--font-mono);font-size:14px;color:var(--text);white-space:nowrap}
+.guard-note{margin-top:12px;font-size:12px;color:var(--faint);line-height:1.5}
+.guard-note strong{color:var(--dim)}
+
+/* ---------- data tables ---------- */
+.table-wrap{margin-top:4px;overflow-x:auto}
+.data-table{width:100%;border-collapse:collapse;min-width:0}
+.data-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);font-weight:500;padding:0 12px 10px;white-space:nowrap}
+.data-table td{padding:13px 12px;border-top:1px solid var(--line);font-family:var(--font-mono);font-size:14px;color:var(--text)}
+.data-table tbody tr{transition:background var(--dur) var(--ease)}
+.data-table tbody tr[data-tier]{cursor:pointer}
+.data-table tbody tr[data-tier]:hover{background:rgba(255,255,255,.03)}
+.data-table tbody tr.is-selected{background:var(--accent-dim)}
+.data-table tbody tr.is-selected td:first-child{color:var(--accent)}
+.data-table .cell-result{font-family:var(--font-ui);font-size:13px}
+.pos{color:var(--accent)}
+.neg{color:var(--danger)}
+.table-note{font-size:12px;color:var(--faint);margin-top:12px;line-height:1.5}
+
+/* ---------- callout ---------- */
+.callout{display:flex;gap:16px;padding:20px;border-radius:var(--r-card);background:var(--accent-dim);border:1px solid var(--accent-line);margin-top:16px}
+.callout-icon{width:22px;height:22px;color:var(--accent);margin-top:2px}
+.callout-title{font-size:14.5px;font-weight:600;color:var(--text)}
+.callout-body{margin-top:6px;font-size:14px;color:var(--dim);max-width:80ch}
+.callout-body strong{color:var(--accent);font-family:var(--font-mono);font-weight:500}
+.callout-note{margin-top:8px;font-size:12px;color:var(--faint)}
+
+/* ---------- view head / charts / log / empty ---------- */
+.view-head{margin-bottom:26px}
+.view-title{font-family:var(--font-display);font-weight:400;font-size:clamp(28px,3.6vw,44px);line-height:1.05}
+.view-sub{margin-top:8px;color:var(--dim);font-size:14px}
+.chart{width:100%;height:auto;display:block;margin-top:6px}
+.chart text{font-family:var(--font-mono);font-size:11px;fill:var(--faint)}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px}
+.legend-item{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--dim)}
+.legend-swatch{width:14px;height:3px;border-radius:2px;flex:none}
+.legend-swatch.is-band{height:10px;background:rgba(255,255,255,.10);border-radius:2px}
+.log{display:grid}
+.log-item{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.log-item:last-child{border-bottom:0}
+.log-time{font-family:var(--font-mono);font-size:11.5px;color:var(--faint);white-space:nowrap;min-width:58px}
+.log-text{font-size:13px;color:var(--dim)}
+.empty{display:grid;gap:10px;place-items:center;text-align:center;padding:44px 20px}
+.empty-icon{width:28px;height:28px;color:var(--faint)}
+.empty-title{font-size:15px;font-weight:600}
+.empty-body{font-size:13.5px;color:var(--dim);max-width:48ch}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.chip{padding:6px 13px;border-radius:999px;border:1px solid var(--line);color:var(--dim);font-size:13px;transition:color var(--dur) var(--ease),border-color var(--dur) var(--ease),background var(--dur) var(--ease)}
+.chip:hover{color:var(--text);border-color:var(--line-2)}
+.chip[aria-pressed="true"]{color:var(--accent);border-color:var(--accent-line);background:var(--accent-dim)}
+
+/* ---------- form ---------- */
+.form{display:grid;gap:18px;max-width:520px;margin-top:4px}
+.field{display:grid;gap:7px}
+.field label{font-size:12.5px;color:var(--dim)}
+.field .req{color:var(--accent)}
+.field input,.field select{
+  font:inherit;font-size:14.5px;color:var(--text);background:var(--s2);
+  border:1px solid var(--line-2);border-radius:var(--r-ctl);padding:11px 12px;min-height:44px;width:100%;
+  transition:border-color var(--dur) var(--ease),background var(--dur) var(--ease);
+}
+.field input::placeholder{color:var(--faint)}
+.field input:hover,.field select:hover{border-color:rgba(255,255,255,.22)}
+.field input[aria-invalid="true"],.field select[aria-invalid="true"]{border-color:var(--danger)}
+.field .err{font-size:12px;color:var(--danger);display:none}
+.field .err.is-on{display:block}
+.field .hint{font-size:12px;color:var(--faint)}
+.form-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
+.result{display:none;margin-top:18px;gap:10px;padding:16px;border-radius:var(--r-ctl);background:var(--accent-dim);border:1px solid var(--accent-line);align-items:flex-start}
+.result.is-on{display:flex}
+.result svg{width:18px;height:18px;color:var(--accent);margin-top:2px}
+.result p{font-size:13.5px;color:var(--dim)}
+
+/* ---------- insights ---------- */
+.kicker{display:flex;align-items:center;gap:8px;font-size:10.5px;text-transform:uppercase;letter-spacing:.12em;color:var(--accent);margin-bottom:8px}
+.insights-hero{display:grid;grid-template-columns:minmax(0,1fr) 224px;gap:32px;align-items:end;padding:6px 0 28px}
+.ref-account{display:grid;gap:6px;padding:14px 16px}
+.ref-account-value{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ref-account-value strong{font-family:var(--font-mono);font-size:18px;font-weight:500}
+.ref-select{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;color:var(--dim);transition:color var(--dur) var(--ease),background var(--dur) var(--ease)}
+.ref-select:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.ref-select svg{width:14px;height:14px;color:var(--faint)}
+.gate-card{margin-bottom:0}
+.gate-row{display:flex;align-items:center;justify-content:space-between;gap:20px}
+.gate-body{min-width:0}
+.gate-title{font-size:14.5px;font-weight:600}
+.gate-sub{font-size:12.5px;color:var(--dim);margin-top:4px;max-width:68ch}
+.gate-status{display:flex;align-items:center;gap:12px;flex:none}
+.gate-label{font-size:12px;font-family:var(--font-mono);color:var(--faint);white-space:nowrap}
+.gate-label.is-on{color:var(--accent)}
+.session-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.session-card{display:grid;gap:12px;padding:18px 20px}
+.session-name{font-size:14.5px;font-weight:600}
+.session-line{height:38px;border-bottom:1px dashed var(--line-2)}
+.session-wait{font-size:13.5px;color:var(--dim)}
+.session-meta{font-size:11.5px;color:var(--faint);font-family:var(--font-mono)}
+.note-row{display:flex;gap:10px;align-items:flex-start;margin-top:16px;font-size:12.5px;color:var(--faint);max-width:96ch}
+.note-row svg{width:15px;height:15px;color:var(--faint);margin-top:2px}
+@media (max-width:1080px){
+  .insights-hero{grid-template-columns:minmax(0,1fr)}
+  .ref-account{max-width:440px}
+  .session-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:720px){
+  .session-grid{grid-template-columns:minmax(0,1fr)}
+  .gate-row{flex-wrap:wrap;gap:14px}
+}
+
+/* ---------- statusbar ---------- */
+.statusbar{border-top:1px solid var(--line);background:var(--s1)}
+.statusbar-inner{max-width:var(--maxw);margin:0 auto;padding:9px 24px;display:flex;align-items:center;gap:14px;font-size:12px;color:var(--faint)}
+.status-left{display:flex;align-items:center;gap:8px;color:var(--dim);min-width:0}
+.status-right{margin-left:auto;display:flex;align-items:center;gap:14px;white-space:nowrap}
+.status-sep{width:1px;height:12px;background:var(--line-2)}
+.statusbar .mono{font-family:var(--font-mono)}
+
+/* ---------- dialog + toast ---------- */
+.dialog{border:0;padding:0;background:transparent;max-width:min(540px,92vw);width:100%}
+.dialog::backdrop{background:rgba(4,6,5,.72);backdrop-filter:blur(3px)}
+.dialog-inner{background:var(--s1);border:1px solid var(--line-2);border-radius:12px;padding:22px}
+.dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.dialog-head h2{font-family:var(--font-display);font-weight:400;font-size:26px;line-height:1.1}
+.dlg-list{margin-top:16px;display:grid}
+.dlg-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid var(--line)}
+.dlg-row:last-child{border-bottom:0}
+.dlg-row dt{font-size:13px;color:var(--dim)}
+.dlg-row dd{font-family:var(--font-mono);font-size:14px;text-align:right}
+.dialog-note{font-size:12.5px;color:var(--faint);margin-top:14px;line-height:1.5}
+.dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}
+.toast{
+  position:fixed;left:50%;bottom:64px;transform:translate(-50%,14px);
+  display:flex;align-items:center;gap:10px;background:var(--s3);
+  border:1px solid var(--accent-line);color:var(--text);padding:12px 16px;border-radius:var(--r-ctl);
+  font-size:13.5px;opacity:0;pointer-events:none;z-index:40;max-width:min(560px,92vw);
+  transition:opacity var(--dur) var(--ease),transform var(--dur) var(--ease);
+}
+.toast.is-on{opacity:1;transform:translate(-50%,0)}
+.toast svg{width:18px;height:18px;color:var(--accent)}
+.spin{width:15px;height:15px;border:2px solid rgba(7,23,12,.25);border-top-color:var(--on-accent);border-radius:50%;animation:spin .7s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- custom rules + toggle pills ---------- */
+.rules-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:8px}
+.rules-grid label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--faint);margin-bottom:6px}
+.rules-grid input{width:100%;font-family:var(--font-mono);font-size:14.5px;color:var(--text);background:var(--s2);border:1px solid var(--line-2);border-radius:var(--r-ctl);padding:10px 12px;min-height:42px}
+.pill-switch{cursor:pointer;transition:color var(--dur) var(--ease),border-color var(--dur) var(--ease)}
+.pill-switch[aria-checked="false"]{color:var(--faint)}
+.pill-switch[aria-checked="false"] .dot{background:var(--s3);box-shadow:inset 0 0 0 1px var(--line-2)}
+@media(max-width:720px){.rules-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---------- responsive ---------- */
+@media (max-width:1080px){
+  .hero{grid-template-columns:minmax(0,1fr);gap:22px;align-items:start}
+  .hero-aside{max-width:440px}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cols{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:860px){
+  .brand-sub{display:none}
+  .strip-right{display:none}
+  .topbar-inner{padding:12px 16px;gap:12px;flex-wrap:wrap}
+  .nav{order:3;width:100%;margin-left:0}
+  .topbar-right{margin-left:auto}
+  .wrap{padding:24px 16px 48px}
+  .strip-inner{padding:9px 16px}
+  .statusbar-inner{padding:9px 16px}
+  .hide-sm{display:none}
+}
+@media (max-width:720px){
+  .data-table thead{display:none}
+  .data-table,.data-table tbody,.data-table tr,.data-table td{display:block;width:100%}
+  .data-table tbody tr{border:1px solid var(--line);border-radius:var(--r-ctl);margin-bottom:10px;padding:8px 12px;background:var(--s2)}
+  .data-table tbody tr.is-selected{background:var(--accent-dim);border-color:var(--accent-line)}
+  .data-table td{border-top:0;padding:5px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13.5px}
+  .data-table td::before{content:attr(data-label);font-family:var(--font-ui);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint)}
+}
+@media (max-width:560px){
+  .stats{grid-template-columns:minmax(0,1fr)}
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hero-title{font-size:clamp(30px,9vw,42px)}
+  .statusbar-inner{font-size:11px}
+  .segmented button{padding:7px 11px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <symbol id="i-gate" viewBox="0 0 24 24"><path d="M12 3l7 9-7 9-7-9z"/><path d="M12 8.5v7"/></symbol>
+  <symbol id="i-edge" viewBox="0 0 24 24"><path d="M3 16.5l5.2-5.2 3.4 3.4L20.8 4.8"/><path d="M15.6 4.8h5.2v5.2"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.4"/><path d="M12 1.8v3M12 19.2v3M1.8 12h3M19.2 12h3"/></symbol>
+  <symbol id="i-scale" viewBox="0 0 24 24"><path d="M4.5 20h15"/><path d="M12 4.5V20"/><path d="M7.5 7.5l-3.2 6.2a3.2 3.2 0 006.4 0z"/><path d="M16.5 7.5l-3.2 6.2a3.2 3.2 0 006.4 0z"/><path d="M9 4.5h6"/></symbol>
+  <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6.2 4 12.4L16 12h5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 2.8v5.6c0 4.4-2.9 7.4-7 9-4.1-1.6-7-4.6-7-9V5.8z"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.2 3L5.5 13.2h5.3L9.8 21l7.7-10.2h-5.3z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.6 4.6L19 7.3"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.2"/><path d="M12 7.6v4.8l3.2 2"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5"/><path d="M6 8h12v3.2a6 6 0 01-12 0z"/><path d="M12 17.2V21"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8.5 6h11M8.5 12h11M8.5 18h11"/><circle cx="4.2" cy="6" r="1.1"/><circle cx="4.2" cy="12" r="1.1"/><circle cx="4.2" cy="18" r="1.1"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4.5 3.5v17h15"/><path d="M8.5 16.5v-4M12.5 16.5V8M16.5 16.5v-6"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.6v2.6M12 18.8v2.6M2.6 12h2.6M18.8 12h2.6M5.4 5.4l1.9 1.9M16.7 16.7l1.9 1.9M18.6 5.4l-1.9 1.9M7.3 16.7l-1.9 1.9"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M7 17L17 7"/><path d="M8.4 7H17v8.6"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4.2M12 16.8V21M3 12h4.2M16.8 12H21M6.3 6.3l2.9 2.9M14.8 14.8l2.9 2.9M17.7 6.3l-2.9 2.9M9.2 14.8l-2.9 2.9"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.2"/><path d="M12 11.2v5M12 7.9v.4"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 13.5V6.5A2 2 0 016 4.5h12a2 2 0 012 2v7"/><path d="M4 13.5h4l1.5 2.5h5L16 13.5h4v4a2 2 0 01-2 2H6a2 2 0 01-2-2z"/></symbol>
+</svg>
+
+<a class="skip" href="#content">Skip to content</a>
+
+<div class="app">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gate"/></svg>
+        <span class="brand-name">4H BOT</span>
+        <span class="brand-sub">Prop Terminal</span>
+      </div>
+      <nav class="nav" aria-label="Sections">
+        <button class="nav-item is-active" data-view="challenge" aria-current="page">Challenge</button>
+        <button class="nav-item" data-view="dashboard">Dashboard</button>
+        <button class="nav-item" data-view="trades">Trades</button>
+        <button class="nav-item" data-view="history">History</button>
+        <button class="nav-item" data-view="insights">Insights</button>
+        <button class="nav-item" data-view="connect">Connect</button>
+      </nav>
+      <div class="topbar-right">
+        <span class="pill pill-live"><span class="dot dot-pulse"></span>Live scan · 45m</span>
+        <button class="pill pill-switch" id="enginePill" type="button" title="Force engine scan"><span class="dot dot-on"></span>Engine online</button>
+        <button class="pill pill-switch" id="tgToggle" type="button" role="switch" aria-checked="true" title="Toggle Telegram notifications"><span class="dot dot-on" id="tgDot"></span><span id="tgLabel">Telegram on</span></button>
+        <button class="icon-btn" aria-label="Terminal settings"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-settings"/></svg></button>
+      </div>
+    </div>
+  </header>
+
+  <div class="strip">
+    <div class="strip-inner">
+      <span class="strip-label">Strategy</span>
+      <span class="strip-mono" id="strategyMono">Z=1.5 · SL 2.5×ATR(50) · TP 50-SMA · 4H EMA200 + Gate A<span id="strategyGate"></span></span>
+      <span class="strip-right"><span class="strip-label">Validated</span><span class="strip-mono">58.2% WR / PF 1.22</span></span>
+    </div>
+  </div>
+
+  <main class="content od-scroll" id="content">
+
+    <!-- ============ CHALLENGE ============ -->
+    <section class="view" data-view="challenge" aria-labelledby="chTitle">
+      <div class="wrap">
+
+        <div class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow"><span class="dot dot-on"></span>Challenge setup · Step 1 of 5</p>
+            <h1 class="hero-title" id="chTitle">Prove the edge.<br>Keep the account.</h1>
+            <p class="hero-sub">Every prop rule the bot must respect — account size, daily loss, total drawdown and pass target — is resolved before a single order fires. <span class="accent-text">The rules come first.</span></p>
+          </div>
+          <div class="hero-aside card">
+            <div class="od-row">
+              <span class="micro od-fill">Auto-pick tier</span>
+              <button class="switch" id="autoSwitch" role="switch" aria-checked="false" aria-label="Auto-pick account tier"><span></span></button>
+            </div>
+            <p class="micro-note">When on, the bot suggests the largest tier whose drawdown budget still fits your bankroll.</p>
+            <p class="hero-aside-value"><span class="micro">Suggested</span><strong id="autoSuggest">$200K</strong></p>
+          </div>
+        </div>
+
+        <div class="stats" role="list" aria-label="Strategy statistics">
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Expected edge</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-edge"/></svg></div>
+            <p class="stat-value">+0.092<span class="unit">R</span></p>
+            <p class="stat-cap">Per trade · backtest prior</p>
+          </article>
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Historical win rate</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-target"/></svg></div>
+            <p class="stat-value">58.2<span class="unit">%</span></p>
+            <p class="stat-cap">Backtest, not live results</p>
+          </article>
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Average win / loss</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-scale"/></svg></div>
+            <p class="stat-value">0.88<span class="unit">:1 R</span></p>
+            <p class="stat-cap">Small wins, controlled losses</p>
+          </article>
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Signal frequency</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pulse"/></svg></div>
+            <p class="stat-value">4.4<span class="unit">/day</span></p>
+            <p class="stat-cap">Historical average across pairs</p>
+          </article>
+        </div>
+
+        <div class="cols">
+          <div class="col-main">
+            <section class="card" aria-labelledby="acctTitle">
+              <div class="card-head">
+                <div>
+                  <h2 class="card-title" id="acctTitle">Account size</h2>
+                  <p class="card-sub">Six tiers · one-step evaluation</p>
+                </div>
+                <svg class="card-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chart"/></svg>
+              </div>
+
+              <div class="tiles" role="radiogroup" aria-label="Account size">
+                <button class="tile od-cell" role="radio" aria-checked="false" tabindex="-1" data-tier="5k">
+                  <span class="tile-size od-nowrap">$5K</span><span class="tile-meta od-nowrap">tgt $500 · dd $500</span>
+                </button>
+                <button class="tile od-cell" role="radio" aria-checked="false" tabindex="-1" data-tier="10k">
+                  <span class="tile-size od-nowrap">$10K</span><span class="tile-meta od-nowrap">tgt $1K · dd $1K</span>
+                </button>
+                <button class="tile od-cell" role="radio" aria-checked="false" tabindex="-1" data-tier="25k">
+                  <span class="tile-size od-nowrap">$25K</span><span class="tile-meta od-nowrap">tgt $2.5K · dd $2.5K</span>
+                </button>
+                <button class="tile od-cell" role="radio" aria-checked="false" tabindex="-1" data-tier="50k">
+                  <span class="tile-size od-nowrap">$50K</span><span class="tile-meta od-nowrap">tgt $5K · dd $4K</span>
+                </button>
+                <button class="tile od-cell" role="radio" aria-checked="false" tabindex="-1" data-tier="100k">
+                  <span class="tile-size od-nowrap">$100K</span><span class="tile-meta od-nowrap">tgt $10K · dd $6K</span>
+                </button>
+                <button class="tile od-cell is-selected" role="radio" aria-checked="true" tabindex="0" data-tier="200k">
+                  <span class="tile-size od-nowrap">$200K</span><span class="tile-meta od-nowrap">tgt $20K · dd $10K</span>
+                </button>
+              </div>
+
+              <div class="controls">
+                <div>
+                  <div class="control-head">
+                    <span class="field-label">Risk per trade</span>
+                    <span class="tag">Recommended</span>
+                  </div>
+                  <div class="segmented" role="radiogroup" aria-label="Risk per trade">
+                    <button role="radio" aria-checked="true" data-risk="0.25">0.25%</button>
+                    <button role="radio" aria-checked="false" data-risk="0.5">0.5%</button>
+                    <button role="radio" aria-checked="false" data-risk="1">1%</button>
+                  </div>
+                  <p class="control-note">Approx. <strong id="riskAmt">$1,000</strong> risked per trade at this tier.</p>
+                </div>
+
+                <div>
+                  <div class="control-head"><span class="field-label">Mode</span></div>
+                  <div class="segmented" role="radiogroup" aria-label="Execution mode">
+                    <button role="radio" aria-checked="false" data-mode="live">Live</button>
+                    <button role="radio" aria-checked="true" data-mode="replay"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bolt"/></svg>Replay fast</button>
+                  </div>
+                  <p class="control-note" id="modeNote">Replays the last 12 months of signals at 60× speed — no capital at risk.</p>
+                </div>
+
+                <div>
+                  <div class="control-head"><span class="field-label">Prop firm rules — type yours in</span><span class="tag">Editable</span></div>
+                  <div class="rules-grid">
+                    <div><label for="ruleTarget">Target %</label><input id="ruleTarget" type="number" step="0.5" min="1" max="50" value="10"></div>
+                    <div><label for="ruleDaily">Max daily %</label><input id="ruleDaily" type="number" step="0.5" min="0.5" max="20" value="2.5"></div>
+                    <div><label for="ruleTotal">Max total %</label><input id="ruleTotal" type="number" step="0.5" min="0.5" max="50" value="5"></div>
+                    <div><label for="ruleDays">Min days</label><input id="ruleDays" type="number" step="1" min="0" max="30" value="5"></div>
+                  </div>
+                  <p class="control-note">Guardrails, the pass predictor and the arm dialog follow <strong>your typed rules</strong>, not a preset.</p>
+                </div>
+              </div>
+
+              <div class="cta-block">
+                <button class="btn-primary" id="startBtn">Start challenge <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+                <p class="cta-note">Next engine scan · 16:00 UTC · <span id="ctaTier">$200K tier</span></p>
+              </div>
+            </section>
+          </div>
+
+          <aside class="col-side">
+            <section class="card" aria-labelledby="guardTitle">
+              <div class="card-head">
+                <div>
+                  <h2 class="card-title" id="guardTitle">Capital comes first</h2>
+                  <p class="card-sub">Hard limits enforced by the engine</p>
+                </div>
+                <svg class="card-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"/></svg>
+              </div>
+              <dl class="guard">
+                <div class="guard-row"><dt>Daily loss allowance</dt><dd id="gDaily">$5,000</dd></div>
+                <div class="guard-row"><dt>Total drawdown</dt><dd id="gTotal">$10,000</dd></div>
+                <div class="guard-row"><dt>Effective risk per trade</dt><dd id="gRisk">$1,000</dd></div>
+                <div class="guard-row"><dt>Open trade limit</dt><dd id="gOpen">3</dd></div>
+              </dl>
+              <p class="guard-note">Breach any limit and the challenge closes automatically. Sample evaluation terms for the <strong id="gTier">$200K</strong> tier.</p>
+            </section>
+          </aside>
+        </div>
+
+        <section class="card" aria-labelledby="rulesTitle">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title" id="rulesTitle">Rules engine</h2>
+              <p class="card-sub">Auto-checked by the bot on every completed bar</p>
+            </div>
+            <span class="pill pill-accent">Rules v2.4 active</span>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th scope="col">Size</th><th scope="col">Target</th><th scope="col">Max daily</th><th scope="col">Max total</th><th scope="col">Min days</th><th scope="col">Bot pace</th></tr>
+              </thead>
+              <tbody id="rulesBody"></tbody>
+            </table>
+          </div>
+          <p class="table-note">Bot pace is signals per day at full throttle; the engine self-throttles to the selected risk profile. Select a row to switch tiers. Sample evaluation terms.</p>
+        </section>
+
+        <section class="callout" aria-labelledby="ppTitle">
+          <svg class="callout-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-spark"/></svg>
+          <div>
+            <h2 class="callout-title" id="ppTitle">Pass predictor</h2>
+            <p class="callout-body">Monte Carlo over the current run: <strong id="ppChance">73%</strong> chance to reach target within <strong id="ppDays">9</strong> trading days at <strong id="ppRisk">0.5%</strong> risk. The guardrail auto-pauses the run on max daily loss.</p>
+            <p class="callout-note">Illustrative — 10,000 simulated runs over the backtest distribution.</p>
+          </div>
+        </section>
+
+      </div>
+    </section>
+
+    <!-- ============ DASHBOARD ============ -->
+    <section class="view" data-view="dashboard" aria-labelledby="dashTitle" hidden>
+      <div class="wrap">
+        <div class="view-head">
+          <h1 class="view-title" id="dashTitle">Live dashboard</h1>
+          <p class="view-sub">Run 1 · evaluation tier not armed yet</p>
+        </div>
+
+        <div class="stats" role="list" aria-label="Run status">
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Current equity</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chart"/></svg></div>
+            <p class="stat-value" id="dsEquity">$200,000</p>
+            <p class="stat-cap">Evaluation tier $200K</p>
+          </article>
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Day P&amp;L</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-edge"/></svg></div>
+            <p class="stat-value" id="dsPnl">+$0.00</p>
+            <p class="stat-cap">Not started</p>
+          </article>
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Pass progress</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-target"/></svg></div>
+            <p class="stat-value" id="dsProgress">0<span class="unit">%</span></p>
+            <p class="stat-cap" id="dsCap">Target +$20,000</p>
+          </article>
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Days elapsed</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-clock"/></svg></div>
+            <p class="stat-value" id="dsDays">0<span class="unit">/ 5</span></p>
+            <p class="stat-cap">Minimum trading days</p>
+          </article>
+        </div>
+
+        <div class="cols">
+          <div class="col-main">
+            <section class="card" aria-labelledby="projTitle">
+              <div class="card-head">
+                <div>
+                  <h2 class="card-title" id="projTitle">Payout projection</h2>
+                  <p class="card-sub">30 trading days · backtest distribution</p>
+                </div>
+                <span class="pill">Illustrative</span>
+              </div>
+              <div id="projChart"></div>
+              <div class="legend">
+                <span class="legend-item"><span class="legend-swatch sw-warn"></span>Expected equity</span>
+                <span class="legend-item"><span class="legend-swatch is-band"></span>Illustrative range</span>
+                <span class="legend-item"><span class="legend-swatch sw-accent"></span>Pass target</span>
+              </div>
+            </section>
+          </div>
+
+          <aside class="col-side">
+            <section class="card" aria-labelledby="logTitle">
+              <div class="card-head">
+                <div>
+                  <h2 class="card-title" id="logTitle">Run log</h2>
+                  <p class="card-sub">Engine events for this session</p>
+                </div>
+                <svg class="card-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-list"/></svg>
+              </div>
+              <div class="log">
+                <div class="log-item"><span class="log-time">09:12</span><span class="log-text">Terminal opened · strategy Gate A (Z=1.5) loaded</span></div>
+                <div class="log-item"><span class="log-time">09:12</span><span class="log-text">Rule engine armed · Rules v2.4</span></div>
+                <div class="log-item"><span class="log-time">09:12</span><span class="log-text">Heartbeat OK · broker bridge latency 42 ms</span></div>
+                <div class="log-item"><span class="log-time">—</span><span class="log-text">Waiting: evaluation opens at the next engine scan (16:00 UTC)</span></div>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TRADES ============ -->
+    <section class="view" data-view="trades" aria-labelledby="tradesTitle" hidden>
+      <div class="wrap">
+        <div class="view-head">
+          <h1 class="view-title" id="tradesTitle">Trades</h1>
+          <p class="view-sub">Live feed and the backtest sample the strategy was validated on</p>
+        </div>
+
+        <div class="filters" role="group" aria-label="Filter trades">
+          <button class="chip" data-filter="all" aria-pressed="true">All</button>
+          <button class="chip" data-filter="open" aria-pressed="false">Open</button>
+          <button class="chip" data-filter="closed" aria-pressed="false">Closed</button>
+        </div>
+
+        <section class="card" aria-labelledby="liveFeedTitle">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title" id="liveFeedTitle">Live feed</h2>
+              <p class="card-sub">Orders placed by the bot on this account</p>
+            </div>
+            <span class="pill"><span class="dot"></span>Idle</span>
+          </div>
+          <div class="log" id="liveFeedList" hidden></div>
+          <div class="empty" id="liveFeedEmpty">
+            <svg class="empty-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-inbox"/></svg>
+            <p class="empty-title">No live trades yet</p>
+            <p class="empty-body">The evaluation has not been armed, so the bot has no capital to work with. Start a challenge from the Challenge tab and orders will appear here in real time.</p>
+          </div>
+        </section>
+
+        <section class="card mt-16" aria-labelledby="sampleTitle">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title" id="sampleTitle">Backtest sample</h2>
+              <p class="card-sub">Most recent closed signals from the validation run</p>
+            </div>
+            <span class="pill"><span class="dot dot-on"></span><span id="sampleCount">6 rows</span></span>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th scope="col">Time (UTC)</th><th scope="col">Pair</th><th scope="col">Side</th><th scope="col">Entry</th><th scope="col">Exit</th><th scope="col">R</th><th scope="col">Status</th></tr>
+              </thead>
+              <tbody id="tradesBody"></tbody>
+            </table>
+          </div>
+          <p class="table-note">Sample rows from the backtest, shown for orientation. They are not live results.</p>
+        </section>
+      </div>
+    </section>
+
+    <!-- ============ HISTORY ============ -->
+    <section class="view" data-view="history" aria-labelledby="histTitle" hidden>
+      <div class="wrap">
+        <div class="view-head">
+          <h1 class="view-title" id="histTitle">History &amp; stats</h1>
+          <p class="view-sub">Aggregate of 1,242 backtest runs across the last twelve months</p>
+        </div>
+
+        <div class="stats" role="list" aria-label="Historical statistics">
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Total runs</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-list"/></svg></div>
+            <p class="stat-value">1,242</p>
+            <p class="stat-cap">Across eight pairs</p>
+          </article>
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Win rate</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-target"/></svg></div>
+            <p class="stat-value">58.2<span class="unit">%</span></p>
+            <p class="stat-cap">Backtest, not live results</p>
+          </article>
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Average R</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-edge"/></svg></div>
+            <p class="stat-value">0.092<span class="unit">R</span></p>
+            <p class="stat-cap">Per trade, after costs</p>
+          </article>
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Profit factor</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-scale"/></svg></div>
+            <p class="stat-value">1.22</p>
+            <p class="stat-cap">Gross win / gross loss</p>
+          </article>
+        </div>
+
+        <section class="card" aria-labelledby="monthTitle">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title" id="monthTitle">Win rate by month</h2>
+              <p class="card-sub">Dashed line marks the 58.2% average</p>
+            </div>
+            <span class="pill">Backtest</span>
+          </div>
+          <div id="histChart"></div>
+        </section>
+
+        <section class="card mt-16" aria-labelledby="pastTitle">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title" id="pastTitle">Past challenges</h2>
+              <p class="card-sub">Most recent evaluation attempts</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th scope="col">Date</th><th scope="col">Tier</th><th scope="col">Result</th><th scope="col">Days</th><th scope="col">Net R</th></tr>
+              </thead>
+              <tbody id="pastBody"></tbody>
+            </table>
+          </div>
+          <p class="table-note">Sample history. Results reflect the configured risk profile at the time of each run.</p>
+        </section>
+      </div>
+    </section>
+
+    <!-- ============ INSIGHTS ============ -->
+    <section class="view" data-view="insights" aria-labelledby="insTitle" hidden>
+      <div class="wrap">
+
+        <div class="insights-hero">
+          <div>
+            <p class="kicker"><span class="dot dot-on"></span>Your edge, with perspective</p>
+            <h1 class="hero-title" id="insTitle">Conviction needs evidence.</h1>
+            <p class="hero-sub">Let the evidence earn the next decision.</p>
+          </div>
+          <div class="card ref-account">
+            <span class="micro">Reference account</span>
+            <div class="ref-account-value">
+              <strong class="od-nowrap">$10,000</strong>
+              <button class="ref-select" type="button" aria-label="Reference account model">
+                <span class="micro">Model</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="view-head">
+          <span class="kicker">Evidence, not intuition</span>
+          <h2 class="view-title">Does the session matter?</h2>
+          <p class="view-sub">Gate D measures performance by session. It stays observation-only until you enforce it.</p>
+        </div>
+
+        <section class="card gate-card" aria-labelledby="gateTitle">
+          <div class="gate-row">
+            <div class="gate-body">
+              <p class="gate-title" id="gateTitle">Gate D · Session filter</p>
+              <p class="gate-sub" id="gateSub">Observation only — the Asia filter is not enforced. Enable it to skip signals outside the sessions the evidence favours.</p>
+            </div>
+            <div class="gate-status">
+              <span class="gate-label" id="gateLabel">Disabled</span>
+              <button class="switch" id="gateSwitch" role="switch" aria-checked="false" aria-label="Enforce Gate D session filter"><span></span></button>
+            </div>
+          </div>
+        </section>
+
+        <div class="session-grid mt-16">
+          <article class="card session-card">
+            <span class="session-name">Asian session</span>
+            <span class="session-line" aria-hidden="true"></span>
+            <span class="session-wait">Waiting for data</span>
+            <span class="session-meta">0 trades · insufficient evidence</span>
+          </article>
+          <article class="card session-card">
+            <span class="session-name">London session</span>
+            <span class="session-line" aria-hidden="true"></span>
+            <span class="session-wait">Waiting for data</span>
+            <span class="session-meta">0 trades · insufficient evidence</span>
+          </article>
+          <article class="card session-card">
+            <span class="session-name">New York session</span>
+            <span class="session-line" aria-hidden="true"></span>
+            <span class="session-wait">Waiting for data</span>
+            <span class="session-meta">0 trades · insufficient evidence</span>
+          </article>
+        </div>
+
+        <p class="note-row">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-info"/></svg>
+          <span>Small samples are noise. Session results stay muted until the data earns confidence — enabling Gate D filters future signals, it never invents an edge.</span>
+        </p>
+
+      </div>
+    </section>
+
+    <!-- ============ CONNECT ============ -->
+    <section class="view" data-view="connect" aria-labelledby="connTitle" hidden>
+      <div class="wrap">
+        <div class="view-head">
+          <h1 class="view-title" id="connTitle">Connect prop</h1>
+          <p class="view-sub">Link the broker bridge so the bot can place orders on the challenge account</p>
+        </div>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title">Broker bridge</h2>
+              <p class="card-sub">Credentials stay on this machine for the session</p>
+            </div>
+            <svg class="card-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plug"/></svg>
+          </div>
+
+          <form class="form" id="connectForm" novalidate>
+            <div class="field">
+              <label for="broker">Broker platform <span class="req" aria-hidden="true">*</span></label>
+              <select id="broker" name="broker" required aria-describedby="hint-broker">
+                <option value="">Select a platform</option>
+                <option>MetaTrader 5</option>
+                <option>cTrader</option>
+                <option>Match-Trader</option>
+                <option>DXtrade</option>
+              </select>
+              <p class="hint" id="hint-broker">The platform hosting your evaluation account.</p>
+              <p class="err" id="err-broker" role="alert"></p>
+            </div>
+
+            <div class="field" id="mt5Extra" hidden>
+              <label for="metaToken">MetaAPI token <span class="req" aria-hidden="true">*</span></label>
+              <input id="metaToken" type="password" placeholder="From app.metaapi.cloud" />
+              <p class="hint">The bot trades MT4/MT5 through the MetaAPI cloud bridge.</p>
+              <p class="err" id="err-metaToken" role="alert"></p>
+            </div>
+
+            <div id="ctraderExtra" hidden>
+              <div class="field">
+                <label for="ctClientId">OpenAPI client ID <span class="req" aria-hidden="true">*</span></label>
+                <input id="ctClientId" type="text" placeholder="e.g. 8b1f2c..." />
+                <p class="hint">From openapi.ctrader.com — your Spotware app.</p>
+                <p class="err" id="err-ctClientId" role="alert"></p>
+              </div>
+              <div class="field">
+                <label for="ctSecret">OpenAPI secret <span class="req" aria-hidden="true">*</span></label>
+                <input id="ctSecret" type="password" placeholder="Client secret" />
+                <p class="hint">Client secret from the same Spotware app.</p>
+                <p class="err" id="err-ctSecret" role="alert"></p>
+              </div>
+              <div class="field">
+                <label for="ctAccount">Account ID</label>
+                <input id="ctAccount" type="text" inputmode="numeric" placeholder="e.g. 5423312" />
+                <p class="hint">Your cTrader evaluation account number.</p>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="server">Server address <span class="req" aria-hidden="true">*</span></label>
+              <input id="server" name="server" type="text" placeholder="e.g. GT-Prod-London-01" required aria-describedby="hint-server" />
+              <p class="hint" id="hint-server">Exact string from your broker welcome email.</p>
+              <p class="err" id="err-server" role="alert"></p>
+            </div>
+
+            <div class="field">
+              <label for="login">Account login <span class="req" aria-hidden="true">*</span></label>
+              <input id="login" name="login" type="text" inputmode="numeric" placeholder="e.g. 51203847" required aria-describedby="hint-login" />
+              <p class="hint" id="hint-login">Your numeric evaluation account number.</p>
+              <p class="err" id="err-login" role="alert"></p>
+            </div>
+
+            <div class="field">
+              <label for="password">Password <span class="req" aria-hidden="true">*</span></label>
+              <input id="password" name="password" type="password" placeholder="At least 6 characters" required aria-describedby="hint-password" />
+              <p class="hint" id="hint-password">Use the trading password, not the investor password.</p>
+              <p class="err" id="err-password" role="alert"></p>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn-primary" id="connectSubmit" type="submit">Connect bridge</button>
+              <button class="btn-ghost" type="button" id="connectClear">Clear fields</button>
+            </div>
+          </form>
+
+          <div class="result" id="connectResult" role="status">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>
+            <p id="connectResultMsg">Bridge verified.</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="statusbar">
+    <div class="statusbar-inner">
+      <span class="status-left"><span class="dot dot-on"></span>Connected to MT5 · cTrader bridges</span>
+      <span class="status-right">
+        <span class="mono">Session 2F7A8B3C</span>
+        <span class="status-sep" aria-hidden="true"></span>
+        <span class="mono hide-sm" id="statusTg">Telegram on</span>
+        <span class="status-sep hide-sm" aria-hidden="true"></span>
+        <span class="hide-sm" id="footMode">Sample terminal · not a live account</span>
+      </span>
+    </div>
+  </footer>
+</div>
+
+<dialog class="dialog" id="confirmDialog" aria-labelledby="dlgTitle">
+  <div class="dialog-inner">
+    <div class="dialog-head">
+      <h2 id="dlgTitle">Arm this challenge?</h2>
+      <button class="icon-btn" type="button" id="dlgClose" aria-label="Close"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <dl class="dlg-list">
+      <div class="dlg-row"><dt>Account tier</dt><dd id="dlgTier">$200K</dd></div>
+      <div class="dlg-row"><dt>Pass target</dt><dd id="dlgTarget">$20,000</dd></div>
+      <div class="dlg-row"><dt>Risk per trade</dt><dd id="dlgRisk">0.5%</dd></div>
+      <div class="dlg-row"><dt>Mode</dt><dd id="dlgMode">Replay fast</dd></div>
+      <div class="dlg-row"><dt>Guardrails</dt><dd id="dlgGuard">$5,000 daily</dd></div>
+    </dl>
+    <p class="dialog-note">Arming starts the evaluation countdown and locks these rules for the run. You can change them only before the first order.</p>
+    <div class="dialog-actions">
+      <button class="btn-ghost" type="button" id="dlgCancel">Cancel</button>
+      <button class="btn-primary" type="button" id="confirmBtn">Arm challenge</button>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>
+  <span id="toastMsg">Challenge armed.</span>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  var TIERS = [
+    {id:'5k',   label:'$5K',   size:5000,   target:500,   daily:250,  total:500,   minDays:5, pace:'12.5/day'},
+    {id:'10k',  label:'$10K',  size:10000,  target:1000,  daily:500,  total:1000,  minDays:5, pace:'25/day'},
+    {id:'25k',  label:'$25K',  size:25000,  target:2500,  daily:1250, total:2500,  minDays:5, pace:'62.5/day'},
+    {id:'50k',  label:'$50K',  size:50000,  target:5000,  daily:2000, total:4000,  minDays:5, pace:'125/day'},
+    {id:'100k', label:'$100K', size:100000, target:10000, daily:3000, total:6000,  minDays:5, pace:'250/day'},
+    {id:'200k', label:'$200K', size:200000, target:20000, daily:5000, total:10000, minDays:5, pace:'500/day'}
+  ];
+  var PASS = {'0.25':{chance:64,days:17}, '0.5':{chance:73,days:9}, '1':{chance:81,days:5}};
+  var MONTHS = [['Oct',54.8],['Nov',57.1],['Dec',56.2],['Jan',59.4],['Feb',55.9],['Mar',58.0],['Apr',60.3],['May',57.6],['Jun',58.2],['Jul',59.1],['Aug',58.8],['Sep',58.2]];
+  var TRADES = [
+    {time:'2026-09-12 09:00', pair:'EURUSD', side:'Long',  entry:'1.0842', exit:'1.0871', r:0.34,  status:'closed'},
+    {time:'2026-09-11 13:00', pair:'GBPUSD', side:'Short', entry:'1.2718', exit:'1.2744', r:-0.22, status:'closed'},
+    {time:'2026-09-11 09:00', pair:'USDJPY', side:'Long',  entry:'147.22', exit:'147.86', r:0.58,  status:'closed'},
+    {time:'2026-09-10 17:00', pair:'AUDUSD', side:'Short', entry:'0.6594', exit:'0.6572', r:0.41,  status:'closed'},
+    {time:'2026-09-10 09:00', pair:'EURJPY', side:'Long',  entry:'159.14', exit:'158.86', r:-0.26, status:'closed'},
+    {time:'2026-09-09 13:00', pair:'USDCAD', side:'Long',  entry:'1.3641', exit:'1.3690', r:0.49,  status:'closed'}
+  ];
+  var PAST = [
+    {date:'2026-08-28', tier:'$100K', result:'passed', days:14, r:'+12.4R'},
+    {date:'2026-07-19', tier:'$200K', result:'breached', days:6, r:'-4.1R'},
+    {date:'2026-06-30', tier:'$50K',  result:'passed', days:11, r:'+9.8R'},
+    {date:'2026-05-22', tier:'$100K', result:'passed', days:19, r:'+11.2R'},
+    {date:'2026-04-14', tier:'$25K',  result:'breached', days:4, r:'-3.6R'},
+    {date:'2026-03-08', tier:'$50K',  result:'passed', days:13, r:'+10.5R'}
+  ];
+
+  var state = {tier:'200k', risk:0.25, mode:'replay', filter:'all', gateD:false, rules:{target:10, daily:2.5, total:5, days:5}};
+
+  function $(s,r){ return (r||document).querySelector(s); }
+  function $$(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); }
+  function money(n){ return '$' + n.toLocaleString('en-US'); }
+  function tier(id){ for(var i=0;i<TIERS.length;i++){ if(TIERS[i].id===id) return TIERS[i]; } return TIERS[TIERS.length-1]; }
+  function riskAmount(t){ return Math.round(t.size * state.risk / 100); }
+
+  /* ---------- rendering ---------- */
+  function renderTable(){
+    var body = $('#rulesBody');
+    if(!body) return;
+    body.innerHTML = TIERS.map(function(t){
+      var on = t.id === state.tier;
+      return '<tr tabindex="0" role="button" data-tier="' + t.id + '" class="' + (on?'is-selected':'') + '" aria-pressed="' + on + '">' +
+        '<td data-label="Size"><span class="od-nowrap">' + t.label + '</span></td>' +
+        '<td data-label="Target"><span class="od-nowrap">' + money(t.target) + '</span></td>' +
+        '<td data-label="Max daily"><span class="od-nowrap">' + money(t.daily) + '</span></td>' +
+        '<td data-label="Max total"><span class="od-nowrap">' + money(t.total) + '</span></td>' +
+        '<td data-label="Min days"><span class="od-nowrap">' + t.minDays + 'd</span></td>' +
+        '<td data-label="Bot pace"><span class="od-nowrap">' + t.pace + '</span></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function renderTrades(){
+    var body = $('#tradesBody');
+    if(!body) return;
+    var rows = TRADES.filter(function(t){ return state.filter === 'all' || t.status === state.filter; });
+    if(!rows.length){
+      body.innerHTML = '<tr><td colspan="7" class="cell-result">No trades match this filter.</td></tr>';
+    } else {
+      body.innerHTML = rows.map(function(t){
+        var cls = t.r >= 0 ? 'pos' : 'neg';
+        var sign = t.r >= 0 ? '+' : '';
+        return '<tr>' +
+          '<td data-label="Time (UTC)"><span class="od-nowrap">' + t.time + '</span></td>' +
+          '<td data-label="Pair">' + t.pair + '</td>' +
+          '<td data-label="Side" class="cell-result">' + t.side + '</td>' +
+          '<td data-label="Entry"><span class="od-nowrap">' + t.entry + '</span></td>' +
+          '<td data-label="Exit"><span class="od-nowrap">' + t.exit + '</span></td>' +
+          '<td data-label="R"><span class="od-nowrap ' + cls + '">' + sign + t.r.toFixed(2) + 'R</span></td>' +
+          '<td data-label="Status" class="cell-result">' + (t.status === 'open' ? 'Open' : 'Closed') + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+    var cnt = $('#sampleCount');
+    if(cnt) cnt.textContent = rows.length + (rows.length === 1 ? ' row' : ' rows');
+  }
+
+  function renderPast(){
+    var body = $('#pastBody');
+    if(!body) return;
+    body.innerHTML = PAST.map(function(p){
+      var label = p.result === 'passed' ? 'Passed' : (p.result === 'breached' ? 'Breached' : p.result.charAt(0).toUpperCase() + p.result.slice(1));
+      var cls = p.result === 'passed' ? 'pos' : 'neg';
+      return '<tr>' +
+        '<td data-label="Date"><span class="od-nowrap">' + p.date + '</span></td>' +
+        '<td data-label="Tier"><span class="od-nowrap">' + p.tier + '</span></td>' +
+        '<td data-label="Result"><span class="cell-result ' + cls + '">' + label + '</span></td>' +
+        '<td data-label="Days"><span class="od-nowrap">' + p.days + 'd</span></td>' +
+        '<td data-label="Net R"><span class="od-nowrap ' + cls + '">' + p.r + '</span></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function syncUI(){
+    var t = tier(state.tier);
+
+    $$('.tile').forEach(function(el){
+      var on = el.dataset.tier === state.tier;
+      el.classList.toggle('is-selected', on);
+      el.setAttribute('aria-checked', on ? 'true' : 'false');
+      el.tabIndex = on ? 0 : -1;
+    });
+
+    $$('[data-risk]').forEach(function(el){
+      el.setAttribute('aria-checked', parseFloat(el.dataset.risk) === state.risk ? 'true' : 'false');
+    });
+    $$('[data-mode]').forEach(function(el){
+      el.setAttribute('aria-checked', el.dataset.mode === state.mode ? 'true' : 'false');
+    });
+
+    $('#gDaily').textContent = money(Math.round(t.size * state.rules.daily / 100));
+    $('#gTotal').textContent = money(Math.round(t.size * state.rules.total / 100));
+    $('#gRisk').textContent = money(riskAmount(t));
+    $('#gTier').textContent = t.label;
+    $('#riskAmt').textContent = money(riskAmount(t));
+    $('#ctaTier').textContent = t.label + ' tier';
+    $('#autoSuggest').textContent = t.label;
+
+    $('#modeNote').textContent = state.mode === 'replay'
+      ? 'Replays the last 12 months of signals at 60× speed — no capital at risk.'
+      : 'Fires on the live 4H close. Real capital, real drawdown.';
+
+    var p = PASS[String(state.risk)];
+    var idx = TIERS.indexOf(t);
+    var chance = Math.round(Math.max(35, Math.min(95, p.chance - idx * 1.5 - (state.rules.target - 10) * 1.2)));
+    var days = Math.max(1, Math.round(p.days * state.rules.target / 10));
+    $('#ppChance').textContent = chance + '%';
+    $('#ppDays').textContent = days;
+    $('#ppRisk').textContent = state.risk + '%';
+
+    renderTable();
+  }
+
+  function tierRules(t){
+    return {target: Math.round(t.target/t.size*1000)/10,
+            daily: Math.round(t.daily/t.size*1000)/10,
+            total: Math.round(t.total/t.size*1000)/10,
+            days: t.minDays};
+  }
+  function fillRuleInputs(){
+    $('#ruleTarget').value = state.rules.target;
+    $('#ruleDaily').value = state.rules.daily;
+    $('#ruleTotal').value = state.rules.total;
+    $('#ruleDays').value = state.rules.days;
+  }
+  function selectTier(id, keepRules){
+    if(id === state.tier) return;
+    state.tier = id;
+    if(!keepRules){ state.rules = tierRules(tier(id)); fillRuleInputs(); }
+    syncUI();
+  }
+
+  /* ---------- interaction: tiers ---------- */
+  var tiles = $$('.tile');
+  tiles.forEach(function(el, i){
+    el.addEventListener('click', function(){ selectTier(el.dataset.tier); });
+    el.addEventListener('keydown', function(e){
+      var k = e.key, next = null;
+      if(k === 'ArrowRight' || k === 'ArrowDown') next = (i + 1) % tiles.length;
+      else if(k === 'ArrowLeft' || k === 'ArrowUp') next = (i - 1 + tiles.length) % tiles.length;
+      else if(k === ' ' || k === 'Enter'){ e.preventDefault(); selectTier(el.dataset.tier); return; }
+      if(next !== null){
+        e.preventDefault();
+        tiles[next].focus();
+        selectTier(tiles[next].dataset.tier);
+      }
+    });
+  });
+
+  $$('[data-risk]').forEach(function(el){
+    el.addEventListener('click', function(){ state.risk = parseFloat(el.dataset.risk); syncUI(); });
+  });
+  $$('[data-mode]').forEach(function(el){
+    el.addEventListener('click', function(){ state.mode = el.dataset.mode; syncUI(); });
+  });
+
+  ['Target','Daily','Total','Days'].forEach(function(k){
+    var el = $('#rule' + k);
+    el.addEventListener('input', function(){
+      var v = parseFloat(el.value);
+      if(!isNaN(v) && v > 0){
+        state.rules[k.toLowerCase()] = (k === 'Days') ? Math.round(v) : v;
+        syncUI();
+      }
+    });
+  });
+
+  function syncBrokerExtras(){
+    var v = $('#broker').value;
+    $('#mt5Extra').hidden = v.indexOf('MetaTrader') !== 0;
+    $('#ctraderExtra').hidden = v !== 'cTrader';
+  }
+  $('#broker').addEventListener('change', syncBrokerExtras);
+
+  var sw = $('#autoSwitch');
+  sw.addEventListener('click', function(){
+    var on = sw.getAttribute('aria-checked') === 'true';
+    sw.setAttribute('aria-checked', on ? 'false' : 'true');
+    if(!on) selectTier('200k');
+  });
+
+  /* ---------- interaction: rules table ---------- */
+  var rulesBody = $('#rulesBody');
+  rulesBody.addEventListener('click', function(e){
+    var tr = e.target.closest ? e.target.closest('tr[data-tier]') : null;
+    if(tr) selectTier(tr.dataset.tier);
+  });
+  rulesBody.addEventListener('keydown', function(e){
+    var tr = e.target.closest ? e.target.closest('tr[data-tier]') : null;
+    if(tr && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); selectTier(tr.dataset.tier); }
+  });
+
+  /* ---------- interaction: nav ---------- */
+  function go(view){
+    $$('.nav-item').forEach(function(b){
+      var on = b.dataset.view === view;
+      b.classList.toggle('is-active', on);
+      if(on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    $$('.view').forEach(function(v){ v.hidden = v.dataset.view !== view; });
+    $('#content').scrollTop = 0;
+    if(view === 'dashboard') drawProjection();
+    if(view === 'history') drawHistory();
+    if(view === 'trades') renderTrades();
+  }
+  $$('.nav-item').forEach(function(b){
+    b.addEventListener('click', function(){ go(b.dataset.view); });
+  });
+
+  /* ---------- interaction: trades filter ---------- */
+  $$('[data-filter]').forEach(function(el){
+    el.addEventListener('click', function(){
+      state.filter = el.dataset.filter;
+      $$('[data-filter]').forEach(function(c){ c.setAttribute('aria-pressed', c === el ? 'true' : 'false'); });
+      renderTrades();
+    });
+  });
+
+  /* ---------- charts ---------- */
+  function drawProjection(){
+    var host = $('#projChart');
+    if(!host || host.dataset.done) return;
+    host.dataset.done = '1';
+
+    var W = 800, H = 300, PL = 56, PR = 18, PT = 18, PB = 34;
+    var x0 = PL, x1 = W - PR, y0 = PT, y1 = H - PB;
+    var dmin = 0, dmax = 30, vmin = 196000, vmax = 224000;
+    function X(d){ return x0 + (d - dmin) / (dmax - dmin) * (x1 - x0); }
+    function Y(v){ return y1 - (v - vmin) / (vmax - vmin) * (y1 - y0); }
+    function eq(d){ var k = Math.min(d / 12, 1); var e = 1 - Math.pow(1 - k, 2.2); return 200000 + 20000 * e; }
+    function path(pts){ return pts.map(function(p, i){ return (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' '); }
+
+    var up = [], lo = [], ex = [];
+    for(var d = 0; d <= 30; d++){
+      var v = eq(d), spread = 1200 + 1800 * (d / 30);
+      ex.push([X(d), Y(v)]);
+      up.push([X(d), Y(v + spread)]);
+      lo.push([X(d), Y(v - spread)]);
+    }
+    var band = path(up) + ' ' + path(lo.slice().reverse()).replace(/^M/, 'L') + ' Z';
+
+    var yticks = [200000, 205000, 210000, 215000, 220000].map(function(v){
+      var yy = Y(v).toFixed(1);
+      return '<line x1="' + x0 + '" y1="' + yy + '" x2="' + x1 + '" y2="' + yy + '" stroke="rgba(255,255,255,.06)"/>' +
+             '<text x="' + (PL - 10) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">$' + (v/1000) + 'K</text>';
+    }).join('');
+
+    var xticks = [0, 5, 10, 15, 20, 25, 30].map(function(d){
+      return '<text x="' + X(d).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + (d === 0 ? '0' : d + 'd') + '</text>';
+    }).join('');
+
+    host.innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Projected equity over thirty trading days for the selected tier, with an illustrative range band and a pass target line.">' +
+      yticks + xticks +
+      '<path d="' + band + '" fill="rgba(255,255,255,.05)"/>' +
+      '<line x1="' + x0 + '" y1="' + Y(220000).toFixed(1) + '" x2="' + x1 + '" y2="' + Y(220000).toFixed(1) + '" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 5" opacity=".7"/>' +
+      '<path d="' + path(ex) + '" fill="none" stroke="var(--warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<circle cx="' + X(12).toFixed(1) + '" cy="' + Y(220000).toFixed(1) + '" r="3.5" fill="var(--accent)"/>' +
+      '</svg>';
+  }
+
+  function drawHistory(){
+    var host = $('#histChart');
+    if(!host || host.dataset.done) return;
+    host.dataset.done = '1';
+
+    var W = 800, H = 240, PL = 42, PR = 16, PT = 14, PB = 30;
+    var n = MONTHS.length, gap = 12, bw = (W - PL - PR - gap * (n - 1)) / n;
+    var vmin = 50, vmax = 62;
+    function Y(v){ return (H - PB) - (v - vmin) / (vmax - vmin) * (H - PT - PB); }
+
+    var yticks = [50, 54, 58, 62].map(function(v){
+      var yy = Y(v).toFixed(1);
+      return '<line x1="' + PL + '" y1="' + yy + '" x2="' + (W - PR) + '" y2="' + yy + '" stroke="rgba(255,255,255,.06)"/>' +
+             '<text x="' + (PL - 8) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">' + v + '</text>';
+    }).join('');
+
+    var bars = MONTHS.map(function(m, i){
+      var x = PL + i * (bw + gap), y = Y(m[1]), h = (H - PB) - y;
+      var fill = (i === n - 1) ? 'var(--accent)' : 'rgba(255,255,255,.16)';
+      return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="3" fill="' + fill + '"/>' +
+             '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + m[0] + '</text>';
+    }).join('');
+
+    host.innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Monthly historical win rate over the last twelve months, averaging 58.2 percent.">' +
+      yticks + bars +
+      '<line x1="' + PL + '" y1="' + Y(58.2).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(58.2).toFixed(1) + '" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4 5" opacity=".8"/>' +
+      '</svg>';
+  }
+
+  /* ---------- launch dialog ---------- */
+  var dlg = $('#confirmDialog');
+  function openDialog(){
+    var t = tier(state.tier);
+    $('#dlgTier').textContent = t.label;
+    $('#dlgTarget').textContent = money(Math.round(t.size * state.rules.target / 100)) + ' (+' + state.rules.target + '%)';
+    $('#dlgRisk').textContent = state.risk + '% · ' + money(riskAmount(t)) + ' / trade';
+    $('#dlgMode').textContent = state.mode === 'replay' ? 'Replay fast (no capital at risk)' : 'Live';
+    $('#dlgGuard').textContent = money(Math.round(t.size * state.rules.daily / 100)) + ' daily · ' + money(Math.round(t.size * state.rules.total / 100)) + ' total';
+    if(typeof dlg.showModal === 'function') dlg.showModal();
+    else dlg.setAttribute('open', '');
+  }
+  function closeDialog(){
+    if(typeof dlg.close === 'function') dlg.close();
+    else dlg.removeAttribute('open');
+  }
+  $('#startBtn').addEventListener('click', openDialog);
+  $('#dlgClose').addEventListener('click', closeDialog);
+  $('#dlgCancel').addEventListener('click', closeDialog);
+
+  var confirmBtn = $('#confirmBtn');
+  confirmBtn.addEventListener('click', function(){
+    var t = tier(state.tier);
+    confirmBtn.disabled = true;
+    confirmBtn.innerHTML = '<span class="spin"></span>' + (state.mode === 'replay' ? 'Replaying history…' : 'Arming…');
+    var payload = {
+      size: t.size,
+      risk_pct: state.risk,
+      mode: state.mode,
+      rules: {target_pct: state.rules.target, daily_pct: state.rules.daily, total_pct: state.rules.total, min_days: state.rules.days}
+    };
+    api('/challenge', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})
+      .then(function(res){
+        var ch = res.challenge || {};
+        var msg = state.mode === 'replay'
+          ? 'Replay complete — ' + (ch.status || 'done') + ' · ' + (ch.n_trades || 0) + ' trades · P&L ' + fmtSigned(ch.profit || 0)
+          : 'Challenge armed — ' + t.label + ' · engine scans hourly on the 1H close.';
+        showToast(msg);
+      })
+      .catch(function(){
+        showToast('Backend offline — challenge stored in demo mode.');
+      })
+      .then(function(){
+        closeDialog();
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Arm challenge';
+        var start = $('#startBtn');
+        start.innerHTML = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>Challenge armed';
+        hydrate();
+        go('dashboard');
+      });
+  });
+
+  var toast = $('#toast'), toastTimer;
+  function showToast(msg){
+    $('#toastMsg').textContent = msg;
+    toast.classList.add('is-on');
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(function(){ toast.classList.remove('is-on'); }, 4500);
+  }
+
+  /* ---------- connect form ---------- */
+  var CFIELDS = [
+    {id:'broker', msg:'Select a broker platform.'},
+    {id:'server', msg:'Enter the server address from your broker email.', when:function(){ return $('#broker').value !== 'cTrader'; }},
+    {id:'login',  msg:'Account number must be at least 4 digits.', when:function(){ return $('#broker').value !== 'cTrader'; }, test:function(v){ return /^\d{4,}$/.test(v.trim()); }},
+    {id:'password', msg:'Password must be at least 6 characters.', when:function(){ return $('#broker').value !== 'cTrader'; }, test:function(v){ return v.length >= 6; }},
+    {id:'metaToken', msg:'MetaAPI token is required for MetaTrader bridges.', when:function(){ return $('#broker').value.indexOf('MetaTrader') === 0; }},
+    {id:'ctClientId', msg:'OpenAPI client ID is required.', when:function(){ return $('#broker').value === 'cTrader'; }},
+    {id:'ctSecret', msg:'OpenAPI secret is required.', when:function(){ return $('#broker').value === 'cTrader'; }}
+  ];
+  function validateField(f){
+    var input = $('#' + f.id), err = $('#err-' + f.id), v, ok;
+    if(!input) return true;
+    if(f.when && !f.when()){
+      input.setAttribute('aria-invalid', 'false');
+      if(err){ err.textContent = ''; err.classList.remove('is-on'); }
+      return true;
+    }
+    v = input.value;
+    if(input.tagName === 'SELECT') ok = v.trim().length > 0;
+    else ok = f.test ? f.test(v) : v.trim().length > 0;
+    input.setAttribute('aria-invalid', ok ? 'false' : 'true');
+    if(err){ err.textContent = ok ? '' : f.msg; err.classList.toggle('is-on', !ok); }
+    return ok;
+  }
+  CFIELDS.forEach(function(f){
+    var input = $('#' + f.id);
+    input.addEventListener('blur', function(){ validateField(f); });
+    input.addEventListener('input', function(){
+      if(input.getAttribute('aria-invalid') === 'true') validateField(f);
+    });
+    input.addEventListener('change', function(){ validateField(f); });
+  });
+
+  $('#connectForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var allOk = true;
+    CFIELDS.forEach(function(f){ if(!validateField(f)) allOk = false; });
+    if(!allOk){
+      var first = $('[aria-invalid="true"]');
+      if(first) first.focus();
+      return;
+    }
+    var btn = $('#connectSubmit');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>Testing bridge…';
+    var payload = {
+      platform: $('#broker').value,
+      server: $('#server').value.trim(),
+      login: $('#login').value.trim(),
+      password: $('#password').value,
+      meta_token: $('#metaToken') ? $('#metaToken').value.trim() : '',
+      ct_client_id: $('#ctClientId') ? $('#ctClientId').value.trim() : '',
+      ct_secret: $('#ctSecret') ? $('#ctSecret').value : '',
+      ct_account_id: $('#ctAccount') ? $('#ctAccount').value.trim() : ''
+    };
+    api('/connect', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})
+      .then(function(res){
+        $('#connectResultMsg').textContent = res.message || 'Bridge verified.';
+        $('#connectResult').classList.add('is-on');
+        showToast('Broker bridge — ' + (res.status || 'ok') + '.');
+      })
+      .catch(function(){
+        $('#connectResultMsg').textContent = 'Bridge test failed — check credentials and the backend logs.';
+        $('#connectResult').classList.add('is-on');
+        showToast('Bridge test failed.');
+      })
+      .then(function(){
+        btn.disabled = false;
+        btn.textContent = 'Connect bridge';
+      });
+  });
+
+  $('#connectClear').addEventListener('click', function(){
+    var form = $('#connectForm');
+    form.reset();
+    CFIELDS.forEach(function(f){
+      $('#' + f.id).setAttribute('aria-invalid', 'false');
+      var err = $('#err-' + f.id);
+      err.textContent = ''; err.classList.remove('is-on');
+    });
+    $('#connectResult').classList.remove('is-on');
+  });
+
+  /* ---------- interaction: Gate D toggle ---------- */
+  var gateSwitch = $('#gateSwitch');
+  function syncGate(){
+    var on = !!state.gateD;
+    gateSwitch.setAttribute('aria-checked', on ? 'true' : 'false');
+    var label = $('#gateLabel');
+    label.textContent = on ? 'Enforced' : 'Disabled';
+    label.classList.toggle('is-on', on);
+    $('#gateSub').textContent = on
+      ? 'Enforced — the bot skips signals outside the sessions the evidence favours. Every skipped signal is still logged for review.'
+      : 'Observation only — the Asia filter is not enforced. Enable it to skip signals outside the sessions the evidence favours.';
+    var suffix = $('#strategyGate');
+    if(suffix) suffix.textContent = on ? ' + Gate D' : '';
+  }
+  gateSwitch.addEventListener('click', function(){
+    state.gateD = !state.gateD;
+    syncGate();
+    showToast(state.gateD
+      ? 'Gate D enforced — session filter active.'
+      : 'Gate D disabled — observation only.');
+  });
+
+  /* ---------- terminal API (Render backend; graceful offline fallback) ---------- */
+  var API_ONLINE = false;
+  function api(path, opts){
+    return fetch('/api' + path, opts || {}).then(function(r){
+      return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+    });
+  }
+  function fmtSigned(n){ return (n >= 0 ? '+' : '') + Math.round(n).toLocaleString('en-US'); }
+
+  function syncTg(on, silent){
+    var tgBtn = $('#tgToggle');
+    tgBtn.setAttribute('aria-checked', on ? 'true' : 'false');
+    $('#tgDot').className = 'dot' + (on ? ' dot-on' : '');
+    $('#tgLabel').textContent = on ? 'Telegram on' : 'Telegram off';
+    var st = $('#statusTg'); if(st) st.textContent = on ? 'Telegram on' : 'Telegram off';
+    if(!silent){
+      api('/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({telegram_enabled: on})}).catch(function(){});
+    }
+  }
+  $('#tgToggle').addEventListener('click', function(){
+    var on = this.getAttribute('aria-checked') !== 'true';
+    syncTg(on);
+    showToast(on ? 'Telegram notifications enabled.' : 'Telegram notifications muted.');
+  });
+
+  $('#enginePill').addEventListener('click', function(){
+    var pill = this;
+    if(!API_ONLINE){ showToast('Engine offline — deploy the Render backend to scan.'); return; }
+    var old = pill.innerHTML;
+    pill.innerHTML = '<span class="spin" style="border-color:rgba(255,255,255,.25);border-top-color:var(--accent)"></span>Scanning…';
+    api('/scan', {method:'POST'}).then(function(res){
+      pill.innerHTML = old;
+      showToast('Scan — ' + (res.signals || 0) + ' signal(s) · ' + (res.opened || []).length + ' opened · ' + (res.booked || []).length + ' closed.');
+      hydrate();
+    }).catch(function(){
+      pill.innerHTML = old;
+      showToast('Scan failed — backend unreachable.');
+    });
+  });
+
+  function applyState(s){
+    API_ONLINE = true;
+    var foot = $('#footMode'); if(foot) foot.textContent = 'Live engine connected';
+    if(s.settings && typeof s.settings.telegram_enabled === 'boolean') syncTg(s.settings.telegram_enabled, true);
+
+    if(s.challenge){
+      var ch = s.challenge;
+      var eq = $('#dsEquity'); if(eq) eq.textContent = money(Math.round(ch.balance));
+      var today = new Date().toISOString().slice(0, 10), dayPnl = 0;
+      (s.closed_trades || []).forEach(function(t){ if(String(t.closed_at || '').slice(0, 10) === today) dayPnl += (t.dollars || 0); });
+      var pn = $('#dsPnl'); if(pn) pn.textContent = (dayPnl >= 0 ? '+$' : '-$') + Math.abs(Math.round(dayPnl)).toLocaleString('en-US');
+      var pg = $('#dsProgress'); if(pg) pg.innerHTML = Math.max(0, Math.round(ch.progress_pct || 0)) + '<span class="unit">%</span>';
+      var dd = $('#dsDays'); if(dd) dd.innerHTML = (ch.days || 0) + '<span class="unit"> / ' + ((ch.rules && ch.rules.min_days) || 5) + '</span>';
+      var cap = $('#dsCap'); if(cap) cap.textContent = 'Target +' + money(Math.round(ch.size * ((ch.rules && ch.rules.target_pct) || 10) / 100));
+    }
+
+    if(s.closed_trades && s.closed_trades.length){
+      TRADES = s.closed_trades.map(function(t){
+        return {time: String(t.closed_at || '').replace('T', ' ').slice(0, 16), pair: t.symbol,
+                side: t.dir === 'LONG' ? 'Long' : 'Short',
+                entry: String(Math.round((t.entry || 0) * 1e5) / 1e5),
+                exit: String(Math.round(((t.result === 'SL' ? t.sl : t.tp) || 0) * 1e5) / 1e5),
+                r: t.r || 0, status: 'closed'};
+      });
+      renderTrades();
+      var cnt = $('#sampleCount'); if(cnt) cnt.textContent = TRADES.length + ' rows';
+    }
+
+    if(s.open_trades && s.open_trades.length){
+      var list = $('#liveFeedList'), empty = $('#liveFeedEmpty');
+      if(list){
+        list.hidden = false; if(empty) empty.hidden = true;
+        list.innerHTML = s.open_trades.map(function(t){
+          return '<div class="log-item"><span class="log-time">' + String(t.opened_at || '').slice(11, 16) + '</span><span class="log-text">' +
+            (t.dir === 'LONG' ? '🟢 Long' : '🔴 Short') + ' ' + t.symbol + ' @ ' + Number(t.entry).toPrecision(6) +
+            ' · SL ' + Number(t.sl).toPrecision(6) + ' · TP ' + Number(t.tp).toPrecision(6) +
+            ' · +' + Number(t.r_target || 0).toFixed(2) + 'R tgt · risk ' + money(Math.round(t.risk_dollars || 0)) + '</span></div>';
+        }).join('');
+      }
+    }
+
+    if(s.challenges && s.challenges.length){
+      PAST = s.challenges.map(function(c){
+        return {date: String(c.started_at || c.ended_at || '').slice(0, 10),
+                tier: '$' + Math.round(c.size / 1000) + 'K',
+                result: c.status, days: c.days || 0,
+                r: (c.r_total >= 0 ? '+' : '') + (c.r_total || 0) + 'R'};
+      });
+      renderPast();
+    }
+  }
+
+  function hydrate(){
+    api('/state').then(applyState).catch(function(){ API_ONLINE = false; });
+  }
+
+  /* ---------- boot ---------- */
+  syncUI();
+  syncGate();
+  renderTrades();
+  renderPast();
+  fillRuleInputs();
+  hydrate();
+})();
+</script>
+</body>
+</html>

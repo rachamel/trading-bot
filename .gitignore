@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.pyc
+
+# Terminal local database (re-seeds from trade_log.json on first boot)
+api/terminal.db
+
+# OS
+Thumbs.db
+.DS_Store
