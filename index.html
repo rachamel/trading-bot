@@ -1607,8 +1607,17 @@ svg.ico{width:18px;height:18px}
     }
   }
 
-  function hydrate(){
-    api('/state').then(applyState).catch(function(){ API_ONLINE = false; });
+  function hydrate(attempt){
+    attempt = attempt || 0;
+    api('/state').then(applyState).catch(function(){
+      API_ONLINE = false;
+      // Render's free tier sleeps after ~15 min idle — the first request wakes it
+      // (~30-60s cold start). Retry so the terminal reconnects by itself once
+      // the backend is up, instead of staying in demo mode until a reload.
+      if(attempt < 5){
+        window.setTimeout(function(){ hydrate(attempt + 1); }, attempt === 0 ? 15000 : 20000);
+      }
+    });
   }
 
   /* ---------- boot ---------- */
