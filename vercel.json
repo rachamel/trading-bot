@@ -1,1 +1,1 @@
-﻿{"$schema": "https://openapi.vercel.sh/vercel.json", "rewrites": [{"source": "/api/(.*)", "destination": "https://fourh-bot-terminal.onrender.com/"}]}
+{"$schema": "https://openapi.vercel.sh/vercel.json", "rewrites": [{"source": "/api/(.*)", "destination": "https://fourh-bot-terminal.onrender.com/api/$1"}]}

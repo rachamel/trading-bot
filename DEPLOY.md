@@ -50,6 +50,25 @@ Free-tier notes: the service sleeps after ~15 min idle and cold-starts in
 `vercel.json` proxies every `/api/*` call to Render, so the UI works with no
 CORS setup and gracefully falls back to demo data if the backend is asleep.
 
+## 2b. Neon Postgres — persistent storage (free, recommended)
+
+By default the backend uses SQLite on the service disk, which is **wiped on
+every deploy** (challenge runs reset; the bot's trade history re-seeds
+automatically, but anything you armed is lost). A free Neon database fixes
+that permanently — the store auto-detects it, no code changes:
+
+1. Go to <https://neon.tech> → sign up (free tier: 0.5 GB — plenty).
+2. Create a project → **Dashboard → Connection string** → copy it
+   (looks like `postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require`).
+3. Render → your service → **Environment** → add:
+   - Key: `DATABASE_URL` — Value: the connection string
+4. Save → Manual deploy. Every table now lives in Postgres and survives
+   redeploys, restarts and spin-downs.
+
+Notes: Neon's free tier suspends idle compute — the first query after a long
+pause takes ~1–3 s to wake. Also make sure Render's **Auto-Deploy** stays
+**Off**, since your bot pushes `trade_log.json` commits a few times a day.
+
 ## 3. Wire the hourly heartbeat
 
 In GitHub → repo → **Settings → Secrets and variables → Actions**:
