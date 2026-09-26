@@ -175,11 +175,9 @@ def replay(size, rules, risk_pct, months=4, pairs=None):
         f = f[f.index >= cutoff]  # yfinance can return MORE than requested (165d for "120d") — honor the window exactly
         f = f.dropna(subset=["z", "sma", "atr", "atr_long", "trend"])
         f["z_prev"] = f["z"].shift(1)
-        recs = {}
-        for ts, row in f.iterrows():
-            if pd.isna(row["z_prev"]):
-                continue
-            recs[ts] = row
+        # to_dict('index') is ~20x faster than iterrows — the walk below then runs
+        # on plain dicts (CPU is the bottleneck on Render's free 0.1-CPU tier).
+        recs = {ts: r for ts, r in f.to_dict("index").items() if not pd.isna(r["z_prev"])}
         if recs:
             data[s] = recs
         time.sleep(0.1)

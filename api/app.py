@@ -74,7 +74,7 @@ def _summary(ch):
     if not ch:
         return None
     rules = json.loads(ch.get("rules") or "{}")
-    closed = store.closed_trades(ch["id"])
+    closed = store.closed_trades(ch["id"], 10000)  # full set — stats must not be sliced
     open_ = store.open_trades(ch["id"])
     wins = [t for t in closed if (t["r"] or 0) > 0]
     gw = sum((t["r"] or 0) for t in wins)
