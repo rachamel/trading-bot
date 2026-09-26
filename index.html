@@ -573,7 +573,18 @@ svg.ico{width:18px;height:18px}
                     <button role="radio" aria-checked="false" data-mode="live">Live</button>
                     <button role="radio" aria-checked="true" data-mode="replay"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bolt"/></svg>Replay fast</button>
                   </div>
-                  <p class="control-note" id="modeNote">Replays the last 12 months of signals at 60× speed — no capital at risk.</p>
+                  <p class="control-note" id="modeNote">Replays the last 12 months of signals on real candles — no capital at risk.</p>
+                </div>
+
+                <div>
+                  <div class="control-head"><span class="field-label">Replay window</span><span class="tag" id="windowTag">12 months</span></div>
+                  <div class="segmented" role="radiogroup" aria-label="Replay window">
+                    <button role="radio" aria-checked="false" data-window="3">3m</button>
+                    <button role="radio" aria-checked="false" data-window="6">6m</button>
+                    <button role="radio" aria-checked="true" data-window="12">12m</button>
+                    <button role="radio" aria-checked="false" data-window="24">24m</button>
+                  </div>
+                  <p class="control-note" id="windowNote">At the engine's prior pace, a 10% target at 0.25% risk needs about 99 trading days — pick a window with room.</p>
                 </div>
 
                 <div>
@@ -638,8 +649,8 @@ svg.ico{width:18px;height:18px}
           <svg class="callout-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-spark"/></svg>
           <div>
             <h2 class="callout-title" id="ppTitle">Pass predictor</h2>
-            <p class="callout-body">Monte Carlo over the current run: <strong id="ppChance">73%</strong> chance to reach target within <strong id="ppDays">9</strong> trading days at <strong id="ppRisk">0.5%</strong> risk. The guardrail auto-pauses the run on max daily loss.</p>
-            <p class="callout-note">Illustrative — 10,000 simulated runs over the backtest distribution.</p>
+            <p class="callout-body">Monte Carlo over the engine's backtest prior (58.2% WR · 0.88R avg win · 4.4 trades/day): <strong id="ppChance">—%</strong> chance to pass within <strong id="ppDays">—</strong> days at <strong id="ppRisk">—%</strong> risk under your typed rules and the selected window. Guardrails close the run on any breach.</p>
+            <p class="callout-note">Illustrative — 400 simulated runs over the backtest prior.</p>
           </div>
         </section>
 
@@ -1041,7 +1052,7 @@ svg.ico{width:18px;height:18px}
     {id:'100k', label:'$100K', size:100000, target:10000, daily:3000, total:6000,  minDays:5, pace:'250/day'},
     {id:'200k', label:'$200K', size:200000, target:20000, daily:5000, total:10000, minDays:5, pace:'500/day'}
   ];
-  var PASS = {'0.25':{chance:64,days:17}, '0.5':{chance:73,days:9}, '1':{chance:81,days:5}};
+  var ENGINE_PRIOR = {winP: 0.582, winR: 0.88, freq: 4.4};
   var MONTHS = [['Oct',54.8],['Nov',57.1],['Dec',56.2],['Jan',59.4],['Feb',55.9],['Mar',58.0],['Apr',60.3],['May',57.6],['Jun',58.2],['Jul',59.1],['Aug',58.8],['Sep',58.2]];
   var TRADES = [
     {time:'2026-09-12 09:00', pair:'EURUSD', side:'Long',  entry:'1.0842', exit:'1.0871', r:0.34,  status:'closed'},
@@ -1060,7 +1071,7 @@ svg.ico{width:18px;height:18px}
     {date:'2026-03-08', tier:'$50K',  result:'passed', days:13, r:'+10.5R'}
   ];
 
-  var state = {tier:'200k', risk:0.25, mode:'replay', filter:'all', gateD:false, rules:{target:10, daily:2.5, total:5, days:5}};
+  var state = {tier:'200k', risk:0.25, mode:'replay', months:12, filter:'all', gateD:false, rules:{target:10, daily:2.5, total:5, days:5}};
 
   function $(s,r){ return (r||document).querySelector(s); }
   function $$(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); }
@@ -1126,6 +1137,36 @@ svg.ico{width:18px;height:18px}
     }).join('');
   }
 
+  /* ---------- honest pass predictor — Monte Carlo over the engine prior ---------- */
+  function monteCarlo(rules, riskPct, months){
+    var winP = ENGINE_PRIOR.winP, winR = ENGINE_PRIOR.winR, freq = ENGINE_PRIOR.freq;
+    var windowDays = Math.round(months * 30);
+    var runs = 400, passes = 0, passDays = [];
+    var totalFrac = rules.total / 100, dailyFrac = rules.daily / 100, targetFrac = rules.target / 100;
+    for(var i = 0; i < runs; i++){
+      var bal = 1, peak = 1, dayPnl = 0, d, k, ntr, R, breached = false;
+      for(d = 0; d < windowDays; d++){
+        dayPnl = 0;
+        ntr = Math.random() < (freq % 1) ? Math.ceil(freq) : Math.floor(freq);
+        for(k = 0; k < ntr; k++){
+          R = Math.random() < winP ? winR : -1;
+          bal += bal * (R * riskPct / 100);
+          dayPnl += R;
+          if(bal > peak) peak = bal;
+          if((peak - bal) >= totalFrac){ breached = true; break; }
+          if((-dayPnl * riskPct / 100) >= dailyFrac){ breached = true; break; }
+        }
+        if(breached) break;
+        if(bal >= 1 + targetFrac && (d + 1) >= rules.days){
+          passes++; passDays.push(d + 1); break;
+        }
+      }
+    }
+    passDays.sort(function(a, b){ return a - b; });
+    var med = passDays.length ? passDays[Math.floor(passDays.length / 2)] : '—';
+    return { chance: Math.round(100 * passes / runs), days: med };
+  }
+
   function syncUI(){
     var t = tier(state.tier);
 
@@ -1142,6 +1183,9 @@ svg.ico{width:18px;height:18px}
     $$('[data-mode]').forEach(function(el){
       el.setAttribute('aria-checked', el.dataset.mode === state.mode ? 'true' : 'false');
     });
+    $$('[data-window]').forEach(function(el){
+      el.setAttribute('aria-checked', parseInt(el.dataset.window, 10) === state.months ? 'true' : 'false');
+    });
 
     $('#gDaily').textContent = money(Math.round(t.size * state.rules.daily / 100));
     $('#gTotal').textContent = money(Math.round(t.size * state.rules.total / 100));
@@ -1152,16 +1196,19 @@ svg.ico{width:18px;height:18px}
     $('#autoSuggest').textContent = t.label;
 
     $('#modeNote').textContent = state.mode === 'replay'
-      ? 'Replays the last 12 months of signals at 60× speed — no capital at risk.'
-      : 'Fires on the live 4H close. Real capital, real drawdown.';
+      ? 'Replays the last ' + state.months + ' months of signals on real candles — no capital at risk.'
+      : 'Fires on the live 1H close, scanning every hour. Real capital, real drawdown.';
 
-    var p = PASS[String(state.risk)];
-    var idx = TIERS.indexOf(t);
-    var chance = Math.round(Math.max(35, Math.min(95, p.chance - idx * 1.5 - (state.rules.target - 10) * 1.2)));
-    var days = Math.max(1, Math.round(p.days * state.rules.target / 10));
-    $('#ppChance').textContent = chance + '%';
-    $('#ppDays').textContent = days;
+    var mc = monteCarlo(state.rules, state.risk, state.months);
+    $('#ppChance').textContent = mc.chance + '%';
+    $('#ppDays').textContent = mc.days;
     $('#ppRisk').textContent = state.risk + '%';
+    var wTag = $('#windowTag'); if(wTag) wTag.textContent = state.months + ' months';
+    var wNote = $('#windowNote');
+    if(wNote){
+      var expDays = Math.ceil(state.rules.target / Math.max(0.05, state.risk * 0.405));
+      wNote.textContent = '≈' + (state.months * 30) + ' days of candles. At the engine\u2019s prior pace, a ' + state.rules.target + '% target at ' + state.risk + '% risk needs about ' + expDays + ' trading days — pick a window with room.';
+    }
 
     renderTable();
   }
@@ -1207,6 +1254,10 @@ svg.ico{width:18px;height:18px}
   });
   $$('[data-mode]').forEach(function(el){
     el.addEventListener('click', function(){ state.mode = el.dataset.mode; syncUI(); });
+  });
+
+  $$('[data-window]').forEach(function(el){
+    el.addEventListener('click', function(){ state.months = parseInt(el.dataset.window, 10); syncUI(); });
   });
 
   ['Target','Daily','Total','Days'].forEach(function(k){
@@ -1416,7 +1467,7 @@ svg.ico{width:18px;height:18px}
     $('#dlgTier').textContent = t.label;
     $('#dlgTarget').textContent = money(Math.round(t.size * state.rules.target / 100)) + ' (+' + state.rules.target + '%)';
     $('#dlgRisk').textContent = state.risk + '% · ' + money(riskAmount(t)) + ' / trade';
-    $('#dlgMode').textContent = state.mode === 'replay' ? 'Replay fast (no capital at risk)' : 'Live';
+    $('#dlgMode').textContent = state.mode === 'replay' ? 'Replay fast · ' + state.months + ' months' : 'Live';
     $('#dlgGuard').textContent = money(Math.round(t.size * state.rules.daily / 100)) + ' daily · ' + money(Math.round(t.size * state.rules.total / 100)) + ' total';
     if(typeof dlg.showModal === 'function') dlg.showModal();
     else dlg.setAttribute('open', '');
@@ -1438,6 +1489,7 @@ svg.ico{width:18px;height:18px}
       size: t.size,
       risk_pct: state.risk,
       mode: state.mode,
+      months: state.months,
       rules: {target_pct: state.rules.target, daily_pct: state.rules.daily, total_pct: state.rules.total, min_days: state.rules.days}
     };
     api('/challenge', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})
