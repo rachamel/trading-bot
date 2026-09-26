@@ -8,6 +8,7 @@ from typing import Optional
 from datetime import datetime, timezone
 import json
 import os
+import threading
 
 import store
 import brain
@@ -157,31 +158,54 @@ def state():
     }
 
 
+def _run_replay(cid, size, risk_pct, months, rules):
+    """Background worker: simulates the full career and lands the verdict in Neon.
+    The terminal watches it build live on the Replay tab via /api/run."""
+    try:
+        run = brain.replay(size, rules, risk_pct, months)
+        for t in run["closed"]:
+            tid = store.add_trade(cid, t)
+            store.close_trade(tid, t["closed_at"], t["r"], t["dollars"], t["result"])
+        for t in run["open_left"]:
+            store.add_trade(cid, t)
+        store.build_equity(cid, size)
+        # if the user cancelled/re-deployed mid-run, respect it
+        current = store.get_challenge(cid)
+        if current and current["status"] != "running":
+            print(f"[replay] challenge {cid} already {current['status']} — leaving as-is")
+            return
+        status = {"passed": "passed", "breached": "breached", "funded": "funded"}.get(run["status"], "expired")
+        store.complete_challenge(cid, status, run["balance"], run.get("peak", run["balance"]), run.get("reason"))
+        store.set_stage(cid, run.get("stage_i", 0))
+        store.backdate_start(cid, run["days"])
+        telegram.notify(
+            f"⚡ *Replay complete* — ${size:,.0f} @ {risk_pct}% risk\n"
+            f"Result: *{status.upper()}* ({run['reason']}) · reached: {run['stage']}\n"
+            f"{run['n_trades']} trades · WR {run['winrate'] or 0}% · PF {run['pf'] or 0} · "
+            f"stage P&L {run['profit_pct']:+.1f}% in {run['days']}d"
+        )
+    except Exception as e:
+        print(f"[replay] challenge {cid} failed: {e}")
+        try:
+            store.complete_challenge(cid, "failed", 0, None, f"replay engine error: {e}")
+        except Exception:
+            pass
+
+
 @app.post("/api/challenge")
 def arm_challenge(body: ChallengeIn):
     rules = body.rules.dict()
     store.cancel_running()
 
     if body.mode == "replay":
-        run = brain.replay(body.size, rules, body.risk_pct, body.months)
+        # Queue the replay and return instantly — the job runs in the background.
         cid = store.create_challenge(body.size, body.risk_pct, "replay", rules)
-        for t in run["closed"]:
-            tid = store.add_trade(cid, t)
-            store.close_trade(tid, t["closed_at"], t["r"], t["dollars"], t["result"])
-        for t in run["open_left"]:
-            store.add_trade(cid, t)
-        store.build_equity(cid, body.size)
-        status = {"passed": "passed", "breached": "breached", "funded": "funded"}.get(run["status"], "expired")
-        store.complete_challenge(cid, status, run["balance"], run.get("peak", run["balance"]), run.get("reason"))
-        store.set_stage(cid, run.get("stage_i", 0))
-        store.backdate_start(cid, run["days"])
-        telegram.notify(
-            f"⚡ *Replay complete* — ${body.size:,.0f} @ {body.risk_pct}% risk\n"
-            f"Result: *{status.upper()}* ({run['reason']}) · reached: {run['stage']}\n"
-            f"{run['n_trades']} trades · WR {run['winrate'] or 0}% · PF {run['pf'] or 0} · "
-            f"stage P&L {run['profit_pct']:+.1f}% in {run['days']}d"
-        )
-        return {"challenge": _summary(store.get_challenge(cid)), "run": run}
+        threading.Thread(
+            target=_run_replay,
+            args=(cid, body.size, body.risk_pct, body.months, rules),
+            daemon=True,
+        ).start()
+        return {"challenge": _summary(store.get_challenge(cid)), "queued": True}
 
     cid = store.create_challenge(body.size, body.risk_pct, "live", rules)
     telegram.notify(

@@ -129,6 +129,17 @@ def init():
                 print(f"[store] migration '{table}.{col}' skipped: {e}")
     seed_from_log()
     backfill_equity()
+    purge_stale_replays()
+
+
+def purge_stale_replays():
+    """On boot, mark interrupted replay runs (redeploys kill in-flight threads).
+    Replay challenges are synchronous-ish jobs — they can never resume."""
+    with _lock, db() as c:
+        c.execute(
+            q("UPDATE challenge SET status='interrupted', reason='redeploy mid-replay — re-arm to rerun', ended_at=%s WHERE status='running' AND mode='replay'"),
+            (_now(),),
+        )
 
 
 def backfill_equity():
@@ -187,9 +198,10 @@ def get_challenge(cid):
 
 
 def active_challenge():
+    """Live surfaces show LIVE things only — replay runs never hijack the dashboard."""
     with db() as c:
         return _row(c.execute(
-            q("SELECT * FROM challenge WHERE status='running' AND id<>0 ORDER BY id DESC LIMIT 1")).fetchone())
+            q("SELECT * FROM challenge WHERE status='running' AND mode='live' AND id<>0 ORDER BY id DESC LIMIT 1")).fetchone())
 
 
 def latest_challenge():

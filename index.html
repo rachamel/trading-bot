@@ -455,7 +455,6 @@ svg.ico{width:18px;height:18px}
         <button class="nav-item is-active" data-view="challenge" aria-current="page">Challenge</button>
         <button class="nav-item" data-view="dashboard">Dashboard</button>
         <button class="nav-item" data-view="replay">Replay</button>
-        <button class="nav-item" data-view="trades">Trades</button>
         <button class="nav-item" data-view="history">History</button>
         <button class="nav-item" data-view="insights">Insights</button>
         <button class="nav-item" data-view="connect">Connect</button>
@@ -723,6 +722,43 @@ svg.ico{width:18px;height:18px}
             </section>
           </aside>
         </div>
+
+        <section class="card" aria-labelledby="openPosTitle">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title" id="openPosTitle">Open positions — live account</h2>
+              <p class="card-sub">Brackets the bot set on this account: entry · stop · target · $ at risk</p>
+            </div>
+            <span class="pill" id="openCount"><span class="dot"></span>0 open</span>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th scope="col">Opened (UTC)</th><th scope="col">Pair</th><th scope="col">Side</th><th scope="col">Entry</th><th scope="col">SL</th><th scope="col">TP</th><th scope="col">R tgt</th><th scope="col">Risk $</th></tr>
+              </thead>
+              <tbody id="openDashBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card mt-16" aria-labelledby="closedTitle">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title" id="closedTitle">Closed trades — live account</h2>
+              <p class="card-sub">Most recent fills on this account, newest first</p>
+            </div>
+            <span class="pill"><span class="dot dot-on"></span><span id="sampleCount">0 rows</span></span>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th scope="col">Time (UTC)</th><th scope="col">Pair</th><th scope="col">Side</th><th scope="col">Entry</th><th scope="col">Exit</th><th scope="col">R</th><th scope="col">Status</th></tr>
+              </thead>
+              <tbody id="tradesBody"></tbody>
+            </table>
+          </div>
+          <p class="table-note">Live engine results on this account — refreshed by every hourly scan.</p>
+        </section>
       </div>
     </section>
 
@@ -814,57 +850,6 @@ svg.ico{width:18px;height:18px}
             </section>
           </aside>
         </div>
-      </div>
-    </section>
-
-    <!-- ============ TRADES ============ -->
-    <section class="view" data-view="trades" aria-labelledby="tradesTitle" hidden>
-      <div class="wrap">
-        <div class="view-head">
-          <h1 class="view-title" id="tradesTitle">Trades</h1>
-          <p class="view-sub">Live feed and the backtest sample the strategy was validated on</p>
-        </div>
-
-        <div class="filters" role="group" aria-label="Filter trades">
-          <button class="chip" data-filter="all" aria-pressed="true">All</button>
-          <button class="chip" data-filter="open" aria-pressed="false">Open</button>
-          <button class="chip" data-filter="closed" aria-pressed="false">Closed</button>
-        </div>
-
-        <section class="card" aria-labelledby="liveFeedTitle">
-          <div class="card-head">
-            <div>
-              <h2 class="card-title" id="liveFeedTitle">Live feed</h2>
-              <p class="card-sub">Orders placed by the bot on this account</p>
-            </div>
-            <span class="pill"><span class="dot"></span>Idle</span>
-          </div>
-          <div class="log" id="liveFeedList" hidden></div>
-          <div class="empty" id="liveFeedEmpty">
-            <svg class="empty-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-inbox"/></svg>
-            <p class="empty-title">No live trades yet</p>
-            <p class="empty-body">The evaluation has not been armed, so the bot has no capital to work with. Start a challenge from the Challenge tab and orders will appear here in real time.</p>
-          </div>
-        </section>
-
-        <section class="card mt-16" aria-labelledby="sampleTitle">
-          <div class="card-head">
-            <div>
-              <h2 class="card-title" id="sampleTitle">Backtest sample</h2>
-              <p class="card-sub">Most recent closed signals from the validation run</p>
-            </div>
-            <span class="pill"><span class="dot dot-on"></span><span id="sampleCount">6 rows</span></span>
-          </div>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr><th scope="col">Time (UTC)</th><th scope="col">Pair</th><th scope="col">Side</th><th scope="col">Entry</th><th scope="col">Exit</th><th scope="col">R</th><th scope="col">Status</th></tr>
-              </thead>
-              <tbody id="tradesBody"></tbody>
-            </table>
-          </div>
-          <p class="table-note">Sample rows from the backtest, shown for orientation. They are not live results.</p>
-        </section>
       </div>
     </section>
 
@@ -1431,7 +1416,6 @@ svg.ico{width:18px;height:18px}
     $('#content').scrollTop = 0;
     if(view === 'dashboard') drawProjection();
     if(view === 'history') drawHistory();
-    if(view === 'trades') renderTrades();
     if(view === 'replay') loadReplay();
   }
   $$('.nav-item').forEach(function(b){
@@ -1487,12 +1471,40 @@ svg.ico{width:18px;height:18px}
 
   /* ---------- replay dashboard ---------- */
   var LAST_REPLAY = null;
+  var loadReplayTimer = null;
+  var LAST_REPLAY_STATUS = null;
   function loadReplay(){
     var statusEl = $('#rpStatus');
-    if(statusEl) statusEl.textContent = 'Loading…';
+    if(statusEl && statusEl.textContent === '—') statusEl.textContent = 'Loading…';
     api('/run').then(function(res){
       LAST_REPLAY = res;
       renderReplay(res);
+      var ch = res.challenge;
+      if(ch && ch.status === 'running'){
+        LAST_REPLAY_STATUS = 'running';
+        window.clearTimeout(loadReplayTimer);
+        loadReplayTimer = window.setTimeout(loadReplay, 15000);  // watch it build live
+      } else if(ch){
+        var prev = LAST_REPLAY_STATUS;
+        LAST_REPLAY_STATUS = ch.status;
+        if(prev === 'running'){
+          var names = ['Phase 1', 'Phase 2', 'Funded'];
+          showReplayResult({run: {
+            status: ch.status,
+            reason: ch.reason,
+            stage: names[ch.stage || 0],
+            stages: res.stages,
+            n_trades: ch.n_trades,
+            winrate: ch.winrate,
+            pf: ch.pf,
+            r_total: ch.r_total,
+            profit_pct: ch.size ? Math.round(10000 * ch.profit / ch.size) / 100 : 0,
+            balance: ch.balance,
+            days: ch.days,
+            equity: ch.equity
+          }});
+        }
+      }
     }).catch(function(){
       if(statusEl) statusEl.textContent = 'Backend offline';
       var r = $('#rpReason'); if(r) r.textContent = 'Start the Render backend, then reopen this tab.';
@@ -1724,9 +1736,11 @@ svg.ico{width:18px;height:18px}
     };
     api('/challenge', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})
       .then(function(res){
-        closeDialog();  // close the arm dialog before opening the result popup (no stacked modals)
-        if(state.mode === 'replay' && res.run){
-          window.setTimeout(function(){ showReplayResult(res); }, 0);
+        closeDialog();
+        if(state.mode === 'replay'){
+          LAST_REPLAY_STATUS = 'running';
+          showToast('Replay queued — watch it build live on the Replay tab (longer windows take a few minutes on the free tier).');
+          go('replay');
           loadReplay();
         } else {
           showToast('Challenge armed — ' + t.label + ' · engine scans hourly on the 1H close.');
@@ -2044,15 +2058,25 @@ svg.ico{width:18px;height:18px}
       var cnt = $('#sampleCount'); if(cnt) cnt.textContent = TRADES.length + ' rows';
     }
 
-    if(s.open_trades && s.open_trades.length){
-      var list = $('#liveFeedList'), empty = $('#liveFeedEmpty');
-      if(list){
-        list.hidden = false; if(empty) empty.hidden = true;
-        list.innerHTML = s.open_trades.map(function(t){
-          return '<div class="log-item"><span class="log-time">' + String(t.opened_at || '').slice(11, 16) + '</span><span class="log-text">' +
-            (t.dir === 'LONG' ? '🟢 Long' : '🔴 Short') + ' ' + t.symbol + ' @ ' + Number(t.entry).toPrecision(6) +
-            ' · SL ' + Number(t.sl).toPrecision(6) + ' · TP ' + Number(t.tp).toPrecision(6) +
-            ' · +' + Number(t.r_target || 0).toFixed(2) + 'R tgt · risk ' + money(Math.round(t.risk_dollars || 0)) + '</span></div>';
+    var openBody = $('#openDashBody');
+    if(openBody){
+      var opens = s.open_trades || [];
+      var oc = $('#openCount');
+      if(oc) oc.innerHTML = '<span class="dot' + (opens.length ? ' dot-on' : '') + '"></span>' + opens.length + ' open';
+      if(!opens.length){
+        openBody.innerHTML = '<tr><td colspan="8" class="cell-result">No open positions — the next signal lands on the next 1H close.</td></tr>';
+      } else {
+        openBody.innerHTML = opens.map(function(t){
+          return '<tr>' +
+            '<td data-label="Opened (UTC)"><span class="od-nowrap">' + String(t.opened_at || '').replace('T', ' ').slice(5, 16) + '</span></td>' +
+            '<td data-label="Pair">' + t.symbol + '</td>' +
+            '<td data-label="Side" class="cell-result">' + (t.dir === 'LONG' ? 'Long' : 'Short') + '</td>' +
+            '<td data-label="Entry"><span class="od-nowrap">' + Math.round(t.entry * 1e5) / 1e5 + '</span></td>' +
+            '<td data-label="SL"><span class="od-nowrap">' + Math.round(t.sl * 1e5) / 1e5 + '</span></td>' +
+            '<td data-label="TP"><span class="od-nowrap">' + Math.round(t.tp * 1e5) / 1e5 + '</span></td>' +
+            '<td data-label="R tgt"><span class="od-nowrap pos">+' + Number(t.r_target || 0).toFixed(2) + 'R</span></td>' +
+            '<td data-label="Risk"><span class="od-nowrap">' + money(Math.round(t.risk_dollars || 0)) + '</span></td>' +
+            '</tr>';
         }).join('');
       }
     }
