@@ -101,15 +101,41 @@ def init():
     with _lock, db() as c:
         for stmt in (SCHEMA_PG if PG else SCHEMA_SQLITE):
             c.execute(stmt)
-        for col in ("reason", "equity"):
-            try:
-                c.execute(f"ALTER TABLE challenge ADD COLUMN {col} TEXT")  # migrations for DBs created before v1.1
-            except Exception:
-                pass  # column already exists
         c.execute(q("INSERT INTO settings(key,value) VALUES ('telegram_enabled','true') ON CONFLICT (key) DO NOTHING"))
         c.execute(q("INSERT INTO settings(key,value) VALUES ('default_risk_pct','0.25') ON CONFLICT (key) DO NOTHING"))
         c.execute(q("INSERT INTO settings(key,value) VALUES ('default_mode','replay') ON CONFLICT (key) DO NOTHING"))
+    # Migrations for DBs created before these columns existed.
+    # IMPORTANT: each runs in its own transaction — in Postgres, a failed
+    # statement aborts the whole transaction, so a duplicate-column error
+    # here would otherwise poison the init and crash the service.
+    for col in ("reason", "equity"):
+        with _lock, db() as c:
+            try:
+                if PG:
+                    have = c.execute(
+                        "SELECT 1 FROM information_schema.columns WHERE table_name='challenge' AND column_name=%s",
+                        (col,)).fetchone()
+                else:
+                    have = c.execute(
+                        "SELECT 1 FROM pragma_table_info('challenge') WHERE name=?", (col,)).fetchone()
+                if not have:
+                    c.execute(f"ALTER TABLE challenge ADD COLUMN {col} TEXT")
+            except Exception as e:
+                print(f"[store] migration '{col}' skipped: {e}")
     seed_from_log()
+    backfill_equity()
+
+
+def backfill_equity():
+    """One-time: build equity curves for challenges created before the column existed."""
+    try:
+        with db() as c:
+            rows = c.execute(q("SELECT id, size FROM challenge WHERE equity IS NULL")).fetchall()
+        for r in rows:
+            build_equity(r["id"], r["size"])
+            print(f"[store] equity backfilled for challenge {r['id']}")
+    except Exception as e:
+        print(f"[store] equity backfill skipped: {e}")
 
 
 # ---------------- settings ----------------
