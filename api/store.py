@@ -108,20 +108,25 @@ def init():
     # IMPORTANT: each runs in its own transaction — in Postgres, a failed
     # statement aborts the whole transaction, so a duplicate-column error
     # here would otherwise poison the init and crash the service.
-    for col, typ in (("reason", "TEXT"), ("equity", "TEXT"), ("stage", "INTEGER")):
+    for table, col, typ in (
+        ("challenge", "reason", "TEXT"),
+        ("challenge", "equity", "TEXT"),
+        ("challenge", "stage", "INTEGER"),
+        ("trades", "stage", "TEXT"),
+    ):
         with _lock, db() as c:
             try:
                 if PG:
                     have = c.execute(
-                        "SELECT 1 FROM information_schema.columns WHERE table_name='challenge' AND column_name=%s",
-                        (col,)).fetchone()
+                        "SELECT 1 FROM information_schema.columns WHERE table_name=%s AND column_name=%s",
+                        (table, col)).fetchone()
                 else:
                     have = c.execute(
-                        "SELECT 1 FROM pragma_table_info('challenge') WHERE name=?", (col,)).fetchone()
+                        f"SELECT 1 FROM pragma_table_info('{table}') WHERE name=?", (col,)).fetchone()
                 if not have:
-                    c.execute(f"ALTER TABLE challenge ADD COLUMN {col} {typ}")
+                    c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
             except Exception as e:
-                print(f"[store] migration '{col}' skipped: {e}")
+                print(f"[store] migration '{table}.{col}' skipped: {e}")
     seed_from_log()
     backfill_equity()
 
@@ -222,6 +227,12 @@ def reset_stage(cid, stage):
         )
 
 
+def set_stage(cid, stage):
+    """Persist the final phase index (used when a replay completes)."""
+    with _lock, db() as c:
+        c.execute(q("UPDATE challenge SET stage=%s WHERE id=%s"), (stage, cid))
+
+
 def past_challenges(limit=10):
     with db() as c:
         rows = c.execute(q("SELECT * FROM challenge WHERE id<>0 ORDER BY id DESC LIMIT %s"), (limit,)).fetchall()
@@ -233,12 +244,20 @@ def past_challenges(limit=10):
 def add_trade(challenge_id, t):
     with _lock, db() as c:
         cur = c.execute(
-            q("INSERT INTO trades(challenge_id,symbol,dir,entry,sl,tp,r_target,risk_dollars,opened_at) "
-              "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id"),
+            q("INSERT INTO trades(challenge_id,symbol,dir,entry,sl,tp,r_target,risk_dollars,opened_at,stage) "
+              "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id"),
             (challenge_id, t["symbol"], t["dir"], t["entry"], t["sl"], t["tp"],
-             t.get("r_target"), t.get("risk_dollars"), t["opened_at"]),
+             t.get("r_target"), t.get("risk_dollars"), t["opened_at"], t.get("stage")),
         )
         return cur.fetchone()["id"]
+
+
+def latest_replay():
+    """Newest terminal-created replay run (what the Replay tab shows)."""
+    with db() as c:
+        row = c.execute(
+            q("SELECT * FROM challenge WHERE id<>0 AND mode='replay' ORDER BY id DESC LIMIT 1")).fetchone()
+        return dict(row) if row else None
 
 
 def close_trade(trade_id, closed_at, r, dollars, result):

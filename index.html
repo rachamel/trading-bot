@@ -454,6 +454,7 @@ svg.ico{width:18px;height:18px}
       <nav class="nav" aria-label="Sections">
         <button class="nav-item is-active" data-view="challenge" aria-current="page">Challenge</button>
         <button class="nav-item" data-view="dashboard">Dashboard</button>
+        <button class="nav-item" data-view="replay">Replay</button>
         <button class="nav-item" data-view="trades">Trades</button>
         <button class="nav-item" data-view="history">History</button>
         <button class="nav-item" data-view="insights">Insights</button>
@@ -719,6 +720,97 @@ svg.ico{width:18px;height:18px}
                 <svg class="card-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-list"/></svg>
               </div>
               <div class="log" id="runLog"></div>
+            </section>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ REPLAY ============ -->
+    <section class="view" data-view="replay" aria-labelledby="repTitle" hidden>
+      <div class="wrap">
+        <div class="view-head">
+          <h1 class="view-title" id="repTitle">Replay dashboard</h1>
+          <p class="view-sub" id="repSub">Latest simulation — the engine's decisions on real historical candles</p>
+        </div>
+
+        <div class="stats" role="list" aria-label="Replay result">
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Result</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-target"/></svg></div>
+            <p class="stat-value" id="rpStatus">—</p>
+            <p class="stat-cap" id="rpReason">Arm a replay from the Challenge tab</p>
+          </article>
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Stage P&amp;L</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-edge"/></svg></div>
+            <p class="stat-value" id="rpPnl">—</p>
+            <p class="stat-cap" id="rpSize">Reached-stage profit</p>
+          </article>
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Trades</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-list"/></svg></div>
+            <p class="stat-value" id="rpTrades">—</p>
+            <p class="stat-cap" id="rpWrPf">WR · PF</p>
+          </article>
+          <article class="stat card od-stat" role="listitem">
+            <div class="stat-top"><span class="stat-label">Days simulated</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-clock"/></svg></div>
+            <p class="stat-value" id="rpDays">—</p>
+            <p class="stat-cap">Over the selected window</p>
+          </article>
+        </div>
+
+        <div class="cols">
+          <div class="col-main">
+            <section class="card" aria-labelledby="repCurveTitle">
+              <div class="card-head">
+                <div>
+                  <h2 class="card-title" id="repCurveTitle">Replay equity curve</h2>
+                  <p class="card-sub">Realized balance · the account resets at each phase boundary</p>
+                </div>
+                <span class="pill" id="repPill"><span class="dot"></span>Idle</span>
+              </div>
+              <div id="repChart"></div>
+              <div class="legend">
+                <span class="legend-item"><span class="legend-swatch sw-warn"></span>Realized equity</span>
+                <span class="legend-item"><span class="legend-swatch sw-accent"></span>Phase target</span>
+              </div>
+            </section>
+
+            <section class="card mt-16" aria-labelledby="repLedgerTitle">
+              <div class="card-head">
+                <div>
+                  <h2 class="card-title" id="repLedgerTitle">Replay trade ledger</h2>
+                  <p class="card-sub">Every simulated fill — real prices, Gate A logic</p>
+                </div>
+                <span class="pill" id="repCount">0 rows</span>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr><th scope="col">Time (UTC)</th><th scope="col">Pair</th><th scope="col">Side</th><th scope="col">Entry</th><th scope="col">Exit</th><th scope="col">R</th><th scope="col">$</th><th scope="col">Phase</th><th scope="col">Result</th></tr>
+                  </thead>
+                  <tbody id="repTradesBody"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <aside class="col-side">
+            <section class="card" aria-labelledby="phaseRoadTitle">
+              <div class="card-head">
+                <div>
+                  <h2 class="card-title" id="phaseRoadTitle">Phase roadmap</h2>
+                  <p class="card-sub">Phase 1 → Phase 2 → Funded</p>
+                </div>
+                <svg class="card-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-spark"/></svg>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr><th scope="col">Phase</th><th scope="col">Target</th><th scope="col">Status</th><th scope="col">Trades</th><th scope="col">WR</th><th scope="col">Net R</th></tr>
+                  </thead>
+                  <tbody id="phaseRows"></tbody>
+                </table>
+              </div>
+              <p class="guard-note">Each phase starts the account fresh at its starting size, exactly like a real evaluation. Drawdown counters reset with it.</p>
             </section>
           </aside>
         </div>
@@ -1047,7 +1139,7 @@ svg.ico{width:18px;height:18px}
     <div id="rrBody"></div>
     <p class="dialog-note">Full ledger on the Trades tab · equity curve on the Dashboard. The owner also gets a Telegram notification if enabled.</p>
     <div class="dialog-actions">
-      <button class="btn-ghost" type="button" id="rrToDash">Open dashboard</button>
+      <button class="btn-ghost" type="button" id="rrToDash">Open replay dashboard</button>
       <button class="btn-primary" type="button" id="rrDone">Done</button>
     </div>
   </div>
@@ -1340,6 +1432,7 @@ svg.ico{width:18px;height:18px}
     if(view === 'dashboard') drawProjection();
     if(view === 'history') drawHistory();
     if(view === 'trades') renderTrades();
+    if(view === 'replay') loadReplay();
   }
   $$('.nav-item').forEach(function(b){
     b.addEventListener('click', function(){ go(b.dataset.view); });
@@ -1355,45 +1448,150 @@ svg.ico{width:18px;height:18px}
   });
 
   /* ---------- charts ---------- */
+  /* ---------- shared equity chart (live account + replays) ---------- */
+  function drawEquityChart(host, pts, size, target){
+    var points = pts.slice();
+    if(points.length === 1) points.unshift([points[0][0], size]);
+    var vals = points.map(function(p){ return p[1]; }).concat([size, target]);
+    var vmin = Math.min.apply(null, vals), vmax = Math.max.apply(null, vals);
+    var padv = (vmax - vmin) * 0.08 || Math.max(1, vmax * 0.002);
+    vmin -= padv; vmax += padv;
+    var W = 800, H = 300, PL = 64, PR = 18, PT = 18, PB = 34;
+    var x0 = PL, x1 = W - PR, y0 = PT, y1 = H - PB;
+    function T(s){ s = String(s); return new Date(s.replace(' ', 'T') + (s.length === 16 ? 'Z' : '')).getTime(); }
+    var t0 = T(points[0][0]), t1 = T(points[points.length - 1][0]);
+    if(!(t1 > t0)) t1 = t0 + 1;
+    function X(ms){ return x0 + (ms - t0) / (t1 - t0) * (x1 - x0); }
+    function Y(v){ return y1 - (v - vmin) / (vmax - vmin) * (y1 - y0); }
+    var line = points.map(function(p, i){ return (i ? 'L' : 'M') + X(T(p[0])).toFixed(1) + ' ' + Y(p[1]).toFixed(1); }).join(' ');
+    var fillP = line + ' L' + x1.toFixed(1) + ' ' + y1 + ' L' + x0.toFixed(1) + ' ' + y1 + ' Z';
+    var yt = '', i, v, ms;
+    for(i = 0; i <= 4; i++){
+      v = vmin + (vmax - vmin) * i / 4;
+      yt += '<line x1="' + x0 + '" y1="' + Y(v).toFixed(1) + '" x2="' + x1 + '" y2="' + Y(v).toFixed(1) + '" stroke="rgba(255,255,255,.06)"/>' +
+            '<text x="' + (PL - 10) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">$' + Math.round(v / 1000) + 'K</text>';
+    }
+    var xt = '';
+    for(i = 0; i <= 3; i++){
+      ms = t0 + (t1 - t0) * i / 3;
+      xt += '<text x="' + X(ms).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' +
+            new Date(ms).toLocaleDateString('en-US', {month:'short', day:'numeric'}) + '</text>';
+    }
+    host.innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Realized equity curve with the target line.">' +
+      yt + xt +
+      '<path d="' + fillP + '" fill="rgba(232,193,90,.06)"/>' +
+      '<line x1="' + x0 + '" y1="' + Y(target).toFixed(1) + '" x2="' + x1 + '" y2="' + Y(target).toFixed(1) + '" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 5" opacity=".7"/>' +
+      '<path d="' + line + '" fill="none" stroke="var(--warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '</svg>';
+  }
+
+  /* ---------- replay dashboard ---------- */
+  var LAST_REPLAY = null;
+  function loadReplay(){
+    var statusEl = $('#rpStatus');
+    if(statusEl) statusEl.textContent = 'Loading…';
+    api('/run').then(function(res){
+      LAST_REPLAY = res;
+      renderReplay(res);
+    }).catch(function(){
+      if(statusEl) statusEl.textContent = 'Backend offline';
+      var r = $('#rpReason'); if(r) r.textContent = 'Start the Render backend, then reopen this tab.';
+    });
+  }
+
+  function renderReplay(res){
+    var ch = res.challenge, stages = res.stages || [], trades = res.trades || [];
+    if(!ch){
+      var e = $('#rpStatus'); if(e) e.textContent = 'No runs yet';
+      var er = $('#rpReason'); if(er) er.textContent = 'Arm a replay from the Challenge tab and results land here';
+      var ep = $('#repPill'); if(ep) ep.innerHTML = '<span class="dot"></span>Idle';
+      return;
+    }
+    var stageNames = ['Phase 1', 'Phase 2', 'Funded'];
+    var labelMap = {funded: 'FUNDED 🎉', passed: 'Passed', breached: 'Breached', expired: 'Expired', running: 'Running', cancelled: 'Cancelled'};
+    var label = labelMap[ch.status] || ch.status;
+
+    var rpStatus = $('#rpStatus');
+    if(rpStatus){
+      rpStatus.textContent = label;
+      rpStatus.className = 'stat-value' + ((ch.status === 'funded' || ch.status === 'passed') ? ' pos' : (ch.status === 'breached' ? ' neg' : ''));
+    }
+    var rpReason = $('#rpReason');
+    if(rpReason) rpReason.textContent = (ch.reason || '—') + ' · reached ' + stageNames[ch.stage || 0];
+    var rules = ch.rules || {};
+    var pct = ch.size ? (100 * ch.profit / ch.size) : 0;
+    var rpPnl = $('#rpPnl');
+    if(rpPnl) rpPnl.innerHTML = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '<span class="unit">%</span>';
+    var rpSize = $('#rpSize');
+    if(rpSize) rpSize.textContent = (ch.status === 'running' ? 'Live balance ' : 'Final-stage balance ') + money(Math.round(ch.balance)) + ' · ' + (ch.profit >= 0 ? '+' : '-') + '$' + Math.abs(Math.round(ch.profit)).toLocaleString('en-US');
+    var rpTrades = $('#rpTrades'); if(rpTrades) rpTrades.textContent = (ch.n_trades || 0).toLocaleString('en-US');
+    var rpWrPf = $('#rpWrPf'); if(rpWrPf) rpWrPf.textContent = (ch.winrate != null ? ch.winrate + '% WR' : '—') + ' · PF ' + (ch.pf != null ? ch.pf : '—');
+    var rpDays = $('#rpDays'); if(rpDays) rpDays.textContent = ch.days || 0;
+    var repPill = $('#repPill'); if(repPill) repPill.innerHTML = '<span class="dot' + (ch.status === 'running' ? ' dot-on' : '') + '"></span>' + label;
+    var repSub = $('#repSub'); if(repSub) repSub.textContent = '$' + Math.round(ch.size / 1000) + 'K replay · ' + (ch.risk_pct || 0) + '% risk · reason: ' + (ch.reason || '—');
+
+    var host = $('#repChart');
+    if(host){
+      if(ch.equity && ch.equity.length){
+        var tgtPct = ([rules.target_pct, rules.target2_pct, rules.funded_pct][Math.min(ch.stage || 0, 2)]) || 10;
+        drawEquityChart(host, ch.equity, ch.size, ch.size * (1 + tgtPct / 100));
+      } else {
+        host.innerHTML = '<div class="empty"><svg class="empty-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-inbox"/></svg><p class="empty-title">No equity curve yet</p><p class="empty-body">The curve appears as soon as the run closes its first trade.</p></div>';
+      }
+    }
+
+    var prs = $('#phaseRows');
+    if(prs){
+      if(!stages.length){
+        prs.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--faint);padding:18px">Phase rows populate after a replay run.</td></tr>';
+      } else {
+        prs.innerHTML = stages.map(function(s){
+          var stTxt = ({passed:'✓ Passed', active:'In progress', breached:'✕ Breached', pending:'Not reached'})[s.status] || s.status;
+          var cls = s.status === 'passed' ? 'pos' : (s.status === 'breached' ? 'neg' : '');
+          return '<tr>' +
+            '<td data-label="Phase"><span class="od-nowrap">' + s.name + '</span></td>' +
+            '<td data-label="Target"><span class="od-nowrap">' + s.target_pct + '%</span></td>' +
+            '<td data-label="Status" class="cell-result"><span class="' + cls + '">' + stTxt + '</span></td>' +
+            '<td data-label="Trades"><span class="od-nowrap">' + s.n_trades + '</span></td>' +
+            '<td data-label="WR"><span class="od-nowrap">' + (s.winrate != null ? s.winrate + '%' : '—') + '</span></td>' +
+            '<td data-label="Net R"><span class="od-nowrap ' + ((s.r_total || 0) >= 0 ? 'pos' : 'neg') + '">' + ((s.r_total || 0) >= 0 ? '+' : '') + (s.r_total || 0) + 'R</span></td>' +
+            '</tr>';
+        }).join('');
+      }
+    }
+
+    var repCount = $('#repCount'); if(repCount) repCount.textContent = trades.length + ' rows';
+    var body2 = $('#repTradesBody');
+    if(body2){
+      if(!trades.length){
+        body2.innerHTML = '<tr><td colspan="9" class="cell-result">No trades in this run.</td></tr>';
+      } else {
+        body2.innerHTML = trades.map(function(t){
+          var cls = (t.r || 0) >= 0 ? 'pos' : 'neg';
+          var exit = t.result === 'SL' ? t.sl : t.tp;
+          return '<tr>' +
+            '<td data-label="Time (UTC)"><span class="od-nowrap">' + String(t.closed_at || '').replace('T', ' ').slice(0, 16) + '</span></td>' +
+            '<td data-label="Pair">' + t.symbol + '</td>' +
+            '<td data-label="Side" class="cell-result">' + (t.dir === 'LONG' ? 'Long' : 'Short') + '</td>' +
+            '<td data-label="Entry"><span class="od-nowrap">' + Math.round(t.entry * 1e5) / 1e5 + '</span></td>' +
+            '<td data-label="Exit"><span class="od-nowrap">' + Math.round(exit * 1e5) / 1e5 + '</span></td>' +
+            '<td data-label="R"><span class="od-nowrap ' + cls + '">' + ((t.r || 0) >= 0 ? '+' : '') + Number(t.r || 0).toFixed(2) + 'R</span></td>' +
+            '<td data-label="$"><span class="od-nowrap ' + cls + '">' + ((t.dollars || 0) >= 0 ? '+$' : '-$') + Math.abs(Math.round(t.dollars || 0)).toLocaleString('en-US') + '</span></td>' +
+            '<td data-label="Phase" class="cell-result">' + (t.stage || 'Phase 1') + '</td>' +
+            '<td data-label="Result" class="cell-result">' + (t.result === 'SL' ? 'SL' : (t.result === 'PHASE-END' ? 'Phase end' : 'TP')) + '</td>' +
+            '</tr>';
+        }).join('');
+      }
+    }
+  }
+
   function drawProjection(){
     var host = $('#projChart');
     if(!host) return;
-    var ch = LAST_STATE && LAST_STATE.challenge;
+    var ch = LAST_STATE ? LAST_STATE.challenge : null;
     if(ch && ch.equity && ch.equity.length){
-      var pts = ch.equity.slice();
-      if(pts.length === 1) pts.unshift([pts[0][0], ch.size]);
       var target = ch.size * (1 + ((ch.rules && ch.rules.target_pct) || 10) / 100);
-      var vals = pts.map(function(p){ return p[1]; }).concat([ch.size, target]);
-      var vmin = Math.min.apply(null, vals), vmax = Math.max.apply(null, vals);
-      var padv = (vmax - vmin) * 0.08 || Math.max(1, vmax * 0.002);
-      vmin -= padv; vmax += padv;
-      var W = 800, H = 300, PL = 64, PR = 18, PT = 18, PB = 34;
-      var x0 = PL, x1 = W - PR, y0 = PT, y1 = H - PB;
-      function T(s){ s = String(s); return new Date(s.replace(' ', 'T') + (s.length === 16 ? 'Z' : '')).getTime(); }
-      var t0 = T(pts[0][0]), t1 = T(pts[pts.length - 1][0]);
-      if(!(t1 > t0)) t1 = t0 + 1;
-      function X(ms){ return x0 + (ms - t0) / (t1 - t0) * (x1 - x0); }
-      function Y(v){ return y1 - (v - vmin) / (vmax - vmin) * (y1 - y0); }
-      var line = pts.map(function(p, i){ return (i ? 'L' : 'M') + X(T(p[0])).toFixed(1) + ' ' + Y(p[1]).toFixed(1); }).join(' ');
-      var fillP = line + ' L' + x1.toFixed(1) + ' ' + y1 + ' L' + x0.toFixed(1) + ' ' + y1 + ' Z';
-      var yt = '', i, v, ms;
-      for(i = 0; i <= 4; i++){
-        v = vmin + (vmax - vmin) * i / 4;
-        yt += '<line x1="' + x0 + '" y1="' + Y(v).toFixed(1) + '" x2="' + x1 + '" y2="' + Y(v).toFixed(1) + '" stroke="rgba(255,255,255,.06)"/>' +
-              '<text x="' + (PL - 10) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">$' + Math.round(v / 1000) + 'K</text>';
-      }
-      var xt = '';
-      for(i = 0; i <= 3; i++){
-        ms = t0 + (t1 - t0) * i / 3;
-        xt += '<text x="' + X(ms).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' +
-              new Date(ms).toLocaleDateString('en-US', {month:'short', day:'numeric'}) + '</text>';
-      }
-      host.innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Realized equity curve for this run, with the pass target line.">' +
-        yt + xt +
-        '<path d="' + fillP + '" fill="rgba(232,193,90,.06)"/>' +
-        '<line x1="' + x0 + '" y1="' + Y(target).toFixed(1) + '" x2="' + x1 + '" y2="' + Y(target).toFixed(1) + '" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 5" opacity=".7"/>' +
-        '<path d="' + line + '" fill="none" stroke="var(--warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
-        '</svg>';
+      drawEquityChart(host, ch.equity, ch.size, target);
       return;
     }
     if(host.dataset.done) return;
@@ -1526,8 +1724,10 @@ svg.ico{width:18px;height:18px}
     };
     api('/challenge', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})
       .then(function(res){
+        closeDialog();  // close the arm dialog before opening the result popup (no stacked modals)
         if(state.mode === 'replay' && res.run){
-          showReplayResult(res);
+          window.setTimeout(function(){ showReplayResult(res); }, 0);
+          loadReplay();
         } else {
           showToast('Challenge armed — ' + t.label + ' · engine scans hourly on the 1H close.');
         }
@@ -1542,7 +1742,7 @@ svg.ico{width:18px;height:18px}
         var start = $('#startBtn');
         start.innerHTML = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>Challenge armed';
         hydrate();
-        go('dashboard');
+        go(state.mode === 'replay' ? 'replay' : 'dashboard');
       });
   });
 
@@ -1594,7 +1794,7 @@ svg.ico{width:18px;height:18px}
   }
   $('#rrClose').addEventListener('click', closeReplayResult);
   $('#rrDone').addEventListener('click', closeReplayResult);
-  $('#rrToDash').addEventListener('click', function(){ closeReplayResult(); go('dashboard'); });
+  $('#rrToDash').addEventListener('click', function(){ closeReplayResult(); go('replay'); });
 
   var toast = $('#toast'), toastTimer;
   function showToast(msg){

@@ -108,14 +108,8 @@ def _summary(ch):
 
 
 def _display_challenge():
-    """The most relevant run: an active challenge first, else the latest run, else the live bot account."""
-    ch = store.active_challenge()
-    if ch:
-        return ch
-    latest = store.latest_challenge()
-    if latest and latest["id"] != 0:
-        return latest
-    return store.get_challenge(0)
+    """The live surface shows live things: active live challenge, else the real bot account."""
+    return store.active_challenge() or store.get_challenge(0)
 
 
 # ---------------- endpoints ----------------
@@ -179,6 +173,7 @@ def arm_challenge(body: ChallengeIn):
         store.build_equity(cid, body.size)
         status = {"passed": "passed", "breached": "breached", "funded": "funded"}.get(run["status"], "expired")
         store.complete_challenge(cid, status, run["balance"], run.get("peak", run["balance"]), run.get("reason"))
+        store.set_stage(cid, run.get("stage_i", 0))
         store.backdate_start(cid, run["days"])
         telegram.notify(
             f"⚡ *Replay complete* — ${body.size:,.0f} @ {body.risk_pct}% risk\n"
@@ -248,6 +243,15 @@ def scan():
         result["challenge_status"] = "breached"
         return result
 
+    # current phase (drives stage tags on new trades + the pass check below)
+    stage = int(ch.get("stage") or 0)
+    stage_defs = [
+        ("Phase 1", rules.get("target_pct", 10), int(rules.get("min_days", 5))),
+        ("Phase 2", rules.get("target2_pct", 5), int(rules.get("min_days2", 5))),
+        ("Funded", rules.get("funded_pct", 10), 0),
+    ]
+    phase_name, phase_target_pct, phase_min_days = stage_defs[min(stage, 2)]
+
     # 3) new Gate A signals (dedupe by symbol+hour, same as main.py)
     signals = brain.scan_signals()
     result["signals"] = len(signals)
@@ -259,6 +263,7 @@ def scan():
         if len(store.open_trades(ch["id"])) >= brain.MAX_OPEN:
             break
         s["risk_dollars"] = round(balance * ch["risk_pct"] / 100, 2)
+        s["stage"] = phase_name
         tid = store.add_trade(ch["id"], s)
         s["id"] = tid
         result["opened"].append({k: s[k] for k in ("symbol", "dir", "entry", "sl", "tp", "r_target", "risk_dollars")})
@@ -278,16 +283,9 @@ def scan():
                 break
 
     # 5) phase pass check — Phase 1 -> Phase 2 -> Funded (typed rules)
-    stage = int(ch.get("stage") or 0)
-    stage_defs = [
-        ("Phase 1", rules.get("target_pct", 10), int(rules.get("min_days", 5))),
-        ("Phase 2", rules.get("target2_pct", 5), int(rules.get("min_days2", 5))),
-        ("Funded", rules.get("funded_pct", 10), 0),
-    ]
-    name, target_pct, min_days = stage_defs[min(stage, 2)]
     profit = balance - size
     days = (now - datetime.fromisoformat(ch["started_at"])).days if ch.get("started_at") else 0
-    if profit >= size * float(target_pct) / 100 and days >= min_days:
+    if profit >= size * float(phase_target_pct) / 100 and days >= phase_min_days:
         if stage >= 2:
             store.complete_challenge(ch["id"], "funded", balance, None, f"funded target reached in {days}d")
             telegram.notify(f"🎉 *FUNDED* — funded target reached in {days}d. Balance ${balance:,.0f}.")
@@ -296,7 +294,7 @@ def scan():
             nxt = stage + 1
             store.reset_stage(ch["id"], nxt)
             telegram.notify(
-                f"✅ *{name} PASSED* in {days}d — {stage_defs[nxt][0]} starts now, "
+                f"✅ *{phase_name} PASSED* in {days}d — {stage_defs[nxt][0]} starts now, "
                 f"balance reset to ${size:,.0f}."
             )
             result["challenge_status"] = f"stage_{nxt}"
@@ -347,3 +345,47 @@ def connect(body: ConnectIn):
 def trades(challenge_id: Optional[int] = None):
     cid = challenge_id if challenge_id is not None else (_display_challenge() or {}).get("id", 0)
     return {"open": store.open_trades(cid), "closed": store.closed_trades(cid)}
+
+
+@app.get("/api/run")
+def run_detail():
+    """The latest replay run for the Replay dashboard: summary, phase roadmap, full ledger."""
+    row = store.latest_replay()
+    if not row:
+        return {"challenge": None, "stages": [], "trades": []}
+    ch = dict(row)
+    closed = store.closed_trades(ch["id"], 2000)
+    rules = json.loads(ch.get("rules") or "{}")
+    names = [("Phase 1", rules.get("target_pct", 10)),
+             ("Phase 2", rules.get("target2_pct", 5)),
+             ("Funded", rules.get("funded_pct", 10))]
+    stage_i = int(ch.get("stage") or 0)
+    status = ch.get("status") or ""
+    # The ledger tells the truth about which phase was reached (older runs may
+    # lack a persisted stage value).
+    tagged = {t.get("stage") or "Phase 1" for t in closed}
+    reached = max([i for i, (n_, _) in enumerate(names) if n_ in tagged] + [0])
+    stage_rows = []
+    for i, (name_, tgt) in enumerate(names):
+        tr = [t for t in closed if (t.get("stage") or "Phase 1") == name_]  # untagged (older) trades bucket Phase 1
+        sw = [t for t in tr if (t["r"] or 0) > 0]
+        wsum = sum((t["r"] or 0) for t in sw)
+        lsum = abs(sum((t["r"] or 0) for t in tr if (t["r"] or 0) <= 0))
+        if status == "funded":
+            st_status = "passed"
+        elif i < reached:
+            st_status = "passed"
+        elif i == reached and status == "passed":
+            st_status = "passed"
+        elif i == reached and status == "breached":
+            st_status = "breached"
+        elif i == reached:
+            st_status = "active"
+        else:
+            st_status = "pending"
+        stage_rows.append({"name": name_, "target_pct": tgt, "status": st_status,
+                           "n_trades": len(tr),
+                           "winrate": round(100 * len(sw) / len(tr), 1) if tr else None,
+                           "pf": round(wsum / lsum, 2) if lsum > 0 else (99.9 if wsum > 0 else None),
+                           "r_total": round(wsum - lsum, 2)})
+    return {"challenge": _summary(ch), "stages": stage_rows, "trades": closed}

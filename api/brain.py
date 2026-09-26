@@ -255,7 +255,8 @@ def replay(size, rules, risk_pct, months=4, pairs=None):
                 sig = _signal_from_row(sym, rec, rec["z_prev"])
                 if not sig:
                     continue
-                open_trades.append({**sig, "risk_dollars": round(balance * risk_pct / 100, 2),
+                open_trades.append({**sig, "stage": stages[stage_i]["name"],
+                                    "risk_dollars": round(balance * risk_pct / 100, 2),
                                     "opened_at": str(ts)})
 
         # 4) phase pass check — typed target and min days for the current phase
@@ -305,7 +306,7 @@ def replay(size, rules, risk_pct, months=4, pairs=None):
 
     return {
         "status": status, "reason": reason,
-        "stage": stages[stage_i]["name"], "stages": stage_rows,
+        "stage": stages[stage_i]["name"], "stage_i": stage_i, "stages": stage_rows,
         "size": size, "risk_pct": risk_pct, "rules": rules,
         "balance": round(balance, 2), "peak": round(peak, 2),
         "profit": round(balance - size, 2),
