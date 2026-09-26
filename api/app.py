@@ -91,6 +91,7 @@ def _summary(ch):
         "id": ch["id"], "size": size, "risk_pct": ch["risk_pct"], "mode": ch["mode"],
         "rules": rules, "status": ch["status"],
         "reason": ch.get("reason"),
+        "equity": (json.loads(ch["equity"]) if ch.get("equity") else None),
         "balance": round(ch["balance"], 2), "peak_balance": round(ch["peak_balance"], 2),
         "profit": round(profit, 2),
         "progress_pct": min(100.0, round(100 * profit / target_amt, 1)) if target_amt > 0 else 0,
@@ -103,8 +104,14 @@ def _summary(ch):
 
 
 def _display_challenge():
-    """Active user challenge if any, else the seeded live bot account (run #0)."""
-    return store.active_challenge() or store.get_challenge(0)
+    """The most relevant run: an active challenge first, else the latest run, else the live bot account."""
+    ch = store.active_challenge()
+    if ch:
+        return ch
+    latest = store.latest_challenge()
+    if latest and latest["id"] != 0:
+        return latest
+    return store.get_challenge(0)
 
 
 # ---------------- endpoints ----------------
@@ -132,7 +139,9 @@ def state():
         "challenge": _summary(ch),
         "challenges": challenges,
         "open_trades": store.open_trades(ch["id"]) if ch else [],
-        "closed_trades": store.closed_trades(ch["id"]) if ch else [],
+        "closed_trades": store.closed_trades(ch["id"], 500) if ch else [],
+        "monthly": store.monthly_wr(),
+        "sessions": store.session_stats(),
     }
 
 
@@ -149,6 +158,7 @@ def arm_challenge(body: ChallengeIn):
             store.close_trade(tid, t["closed_at"], t["r"], t["dollars"], t["result"])
         for t in run["open_left"]:
             store.add_trade(cid, t)
+        store.build_equity(cid, body.size)
         status = {"passed": "passed", "breached": "breached"}.get(run["status"], "expired")
         store.complete_challenge(cid, status, run["balance"], run.get("peak", run["balance"]), run.get("reason"))
         store.backdate_start(cid, run["days"])
@@ -203,6 +213,7 @@ def scan():
             f"✅ CLOSED {t['dir']} {t['symbol']} — {t['result']} {t['r']:+.3f}R (${t['dollars']:+,.0f})"
         )
     store.update_balance(ch["id"], balance)
+    store.build_equity(ch["id"], size)
 
     # 2) guardrails from the typed-in rules
     today = now.date().isoformat()

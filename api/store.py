@@ -101,10 +101,11 @@ def init():
     with _lock, db() as c:
         for stmt in (SCHEMA_PG if PG else SCHEMA_SQLITE):
             c.execute(stmt)
-        try:
-            c.execute("ALTER TABLE challenge ADD COLUMN reason TEXT")  # migration for DBs created before v1.1
-        except Exception:
-            pass  # column already exists
+        for col in ("reason", "equity"):
+            try:
+                c.execute(f"ALTER TABLE challenge ADD COLUMN {col} TEXT")  # migrations for DBs created before v1.1
+            except Exception:
+                pass  # column already exists
         c.execute(q("INSERT INTO settings(key,value) VALUES ('telegram_enabled','true') ON CONFLICT (key) DO NOTHING"))
         c.execute(q("INSERT INTO settings(key,value) VALUES ('default_risk_pct','0.25') ON CONFLICT (key) DO NOTHING"))
         c.execute(q("INSERT INTO settings(key,value) VALUES ('default_mode','replay') ON CONFLICT (key) DO NOTHING"))
@@ -291,5 +292,71 @@ def seed_from_log():
                     (t["symbol"], t["dir"], t["entry"], t["sl"], t["tp"], t.get("r_target"),
                      t.get("risk_dollars", 500), t.get("opened_at")),
                 )
+        build_equity(0, 200000.0)
     except Exception as e:
         print(f"[store] seed skipped: {e}")
+
+
+# ---------------- equity curve + aggregations (real charts) ----------------
+
+def build_equity(cid, size):
+    """Rebuild the realized equity curve for a challenge from all its closed trades."""
+    from datetime import datetime as _dt
+    with db() as c:
+        rows = c.execute(
+            q("SELECT closed_at, dollars FROM trades WHERE challenge_id=%s AND closed_at IS NOT NULL AND dollars IS NOT NULL"),
+            (cid,)).fetchall()
+    try:
+        rows = sorted(rows, key=lambda r: _dt.fromisoformat(str(r["closed_at"])))
+    except Exception:
+        pass
+    pts = []
+    bal = float(size)
+    for r in rows:
+        bal += float(r["dollars"])
+        pts.append([str(r["closed_at"])[:16], round(bal, 2)])
+    with _lock, db() as c:
+        c.execute(q("UPDATE challenge SET equity=%s WHERE id=%s"), (json.dumps(pts), cid))
+    return pts
+
+
+def monthly_wr():
+    """Live win rate grouped by month, across every trade on the terminal."""
+    from collections import OrderedDict
+    with db() as c:
+        rows = c.execute(
+            q("SELECT closed_at, r FROM trades WHERE closed_at IS NOT NULL AND r IS NOT NULL")).fetchall()
+    months = OrderedDict()
+    for row in rows:
+        key = str(row["closed_at"])[:7]  # YYYY-MM
+        m = months.setdefault(key, [0, 0])
+        m[1] += 1
+        if (row["r"] or 0) > 0:
+            m[0] += 1
+    return [{"month": k, "wr": round(100 * v[0] / v[1], 1), "n": v[1]}
+            for k, v in sorted(months.items())]
+
+
+def session_stats():
+    """Per-session performance (approximate — grouped by candle open time, UTC-adjusted stamps)."""
+    windows = [("Asian", 0, 7), ("London", 7, 13), ("New York", 13, 21)]
+    with db() as c:
+        rows = c.execute(
+            q("SELECT opened_at, r FROM trades WHERE closed_at IS NOT NULL AND r IS NOT NULL")).fetchall()
+    agg = {name: {"n": 0, "wins": 0, "r": 0.0} for name, _, _ in windows}
+    for row in rows:
+        try:
+            hour = int(str(row["opened_at"])[11:13])
+        except Exception:
+            continue
+        for name, a, b in windows:
+            if a <= hour < b:
+                d = agg[name]
+                d["n"] += 1
+                d["r"] += float(row["r"] or 0)
+                if (row["r"] or 0) > 0:
+                    d["wins"] += 1
+                break
+    return [{"name": k, "n": v["n"],
+             "wr": round(100 * v["wins"] / v["n"], 1) if v["n"] else None,
+             "r": round(v["r"], 2)} for k, v in agg.items()]

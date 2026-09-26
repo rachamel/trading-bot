@@ -651,7 +651,7 @@ svg.ico{width:18px;height:18px}
       <div class="wrap">
         <div class="view-head">
           <h1 class="view-title" id="dashTitle">Live dashboard</h1>
-          <p class="view-sub">Run 1 · evaluation tier not armed yet</p>
+          <p class="view-sub" id="dashSub">Live bot account · engine trading</p>
         </div>
 
         <div class="stats" role="list" aria-label="Run status">
@@ -682,15 +682,14 @@ svg.ico{width:18px;height:18px}
             <section class="card" aria-labelledby="projTitle">
               <div class="card-head">
                 <div>
-                  <h2 class="card-title" id="projTitle">Payout projection</h2>
-                  <p class="card-sub">30 trading days · backtest distribution</p>
+                  <h2 class="card-title" id="projTitle">Equity curve</h2>
+                  <p class="card-sub" id="projSub">Realized balance across the run</p>
                 </div>
-                <span class="pill">Illustrative</span>
+                <span class="pill" id="projPill"><span class="dot dot-on"></span>Running</span>
               </div>
               <div id="projChart"></div>
               <div class="legend">
-                <span class="legend-item"><span class="legend-swatch sw-warn"></span>Expected equity</span>
-                <span class="legend-item"><span class="legend-swatch is-band"></span>Illustrative range</span>
+                <span class="legend-item"><span class="legend-swatch sw-warn"></span>Realized equity</span>
                 <span class="legend-item"><span class="legend-swatch sw-accent"></span>Pass target</span>
               </div>
             </section>
@@ -705,12 +704,7 @@ svg.ico{width:18px;height:18px}
                 </div>
                 <svg class="card-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-list"/></svg>
               </div>
-              <div class="log">
-                <div class="log-item"><span class="log-time">09:12</span><span class="log-text">Terminal opened · strategy Gate A (Z=1.5) loaded</span></div>
-                <div class="log-item"><span class="log-time">09:12</span><span class="log-text">Rule engine armed · Rules v2.4</span></div>
-                <div class="log-item"><span class="log-time">09:12</span><span class="log-text">Heartbeat OK · broker bridge latency 42 ms</span></div>
-                <div class="log-item"><span class="log-time">—</span><span class="log-text">Waiting: evaluation opens at the next engine scan (16:00 UTC)</span></div>
-              </div>
+              <div class="log" id="runLog"></div>
             </section>
           </aside>
         </div>
@@ -773,29 +767,29 @@ svg.ico{width:18px;height:18px}
       <div class="wrap">
         <div class="view-head">
           <h1 class="view-title" id="histTitle">History &amp; stats</h1>
-          <p class="view-sub">Aggregate of 1,242 backtest runs across the last twelve months</p>
+          <p class="view-sub" id="histSub">Your runs on this terminal · live results</p>
         </div>
 
         <div class="stats" role="list" aria-label="Historical statistics">
           <article class="stat card od-stat" role="listitem">
             <div class="stat-top"><span class="stat-label">Total runs</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-list"/></svg></div>
-            <p class="stat-value">1,242</p>
-            <p class="stat-cap">Across eight pairs</p>
+            <p class="stat-value" id="hsRuns">—</p>
+            <p class="stat-cap">Across all terminal runs</p>
           </article>
           <article class="stat card od-stat" role="listitem">
             <div class="stat-top"><span class="stat-label">Win rate</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-target"/></svg></div>
-            <p class="stat-value">58.2<span class="unit">%</span></p>
-            <p class="stat-cap">Backtest, not live results</p>
+            <p class="stat-value" id="hsWr">—</p>
+            <p class="stat-cap">Live · weighted across all runs</p>
           </article>
           <article class="stat card od-stat" role="listitem">
             <div class="stat-top"><span class="stat-label">Average R</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-edge"/></svg></div>
-            <p class="stat-value">0.092<span class="unit">R</span></p>
-            <p class="stat-cap">Per trade, after costs</p>
+            <p class="stat-value" id="hsR">—</p>
+            <p class="stat-cap">Per trade across all runs</p>
           </article>
           <article class="stat card od-stat" role="listitem">
-            <div class="stat-top"><span class="stat-label">Profit factor</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-scale"/></svg></div>
-            <p class="stat-value">1.22</p>
-            <p class="stat-cap">Gross win / gross loss</p>
+            <div class="stat-top"><span class="stat-label">Net P&L</span><svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-scale"/></svg></div>
+            <p class="stat-value" id="hsPnl">—</p>
+            <p class="stat-cap">Profit across all runs</p>
           </article>
         </div>
 
@@ -803,7 +797,7 @@ svg.ico{width:18px;height:18px}
           <div class="card-head">
             <div>
               <h2 class="card-title" id="monthTitle">Win rate by month</h2>
-              <p class="card-sub">Dashed line marks the 58.2% average</p>
+              <p class="card-sub">Live win rate by month · dashed line marks the 58.2% backtest prior</p>
             </div>
             <span class="pill">Backtest</span>
           </div>
@@ -875,20 +869,20 @@ svg.ico{width:18px;height:18px}
           <article class="card session-card">
             <span class="session-name">Asian session</span>
             <span class="session-line" aria-hidden="true"></span>
-            <span class="session-wait">Waiting for data</span>
-            <span class="session-meta">0 trades · insufficient evidence</span>
+            <span class="session-wait" id="sessAsiaWr">Waiting for data</span>
+            <span class="session-meta" id="sessAsiaMeta">0 trades · insufficient evidence</span>
           </article>
           <article class="card session-card">
             <span class="session-name">London session</span>
             <span class="session-line" aria-hidden="true"></span>
-            <span class="session-wait">Waiting for data</span>
-            <span class="session-meta">0 trades · insufficient evidence</span>
+            <span class="session-wait" id="sessLondonWr">Waiting for data</span>
+            <span class="session-meta" id="sessLondonMeta">0 trades · insufficient evidence</span>
           </article>
           <article class="card session-card">
             <span class="session-name">New York session</span>
             <span class="session-line" aria-hidden="true"></span>
-            <span class="session-wait">Waiting for data</span>
-            <span class="session-meta">0 trades · insufficient evidence</span>
+            <span class="session-wait" id="sessNYWr">Waiting for data</span>
+            <span class="session-meta" id="sessNYMeta">0 trades · insufficient evidence</span>
           </article>
         </div>
 
@@ -999,7 +993,7 @@ svg.ico{width:18px;height:18px}
     <div class="statusbar-inner">
       <span class="status-left"><span class="dot dot-on"></span>Connected to MT5 · cTrader bridges</span>
       <span class="status-right">
-        <span class="mono">Session 2F7A8B3C</span>
+        <span class="mono" id="sessId">—</span>
         <span class="status-sep" aria-hidden="true"></span>
         <span class="mono hide-sm" id="statusTg">Telegram on</span>
         <span class="status-sep hide-sm" aria-hidden="true"></span>
@@ -1280,7 +1274,46 @@ svg.ico{width:18px;height:18px}
   /* ---------- charts ---------- */
   function drawProjection(){
     var host = $('#projChart');
-    if(!host || host.dataset.done) return;
+    if(!host) return;
+    var ch = LAST_STATE && LAST_STATE.challenge;
+    if(ch && ch.equity && ch.equity.length){
+      var pts = ch.equity.slice();
+      if(pts.length === 1) pts.unshift([pts[0][0], ch.size]);
+      var target = ch.size * (1 + ((ch.rules && ch.rules.target_pct) || 10) / 100);
+      var vals = pts.map(function(p){ return p[1]; }).concat([ch.size, target]);
+      var vmin = Math.min.apply(null, vals), vmax = Math.max.apply(null, vals);
+      var padv = (vmax - vmin) * 0.08 || Math.max(1, vmax * 0.002);
+      vmin -= padv; vmax += padv;
+      var W = 800, H = 300, PL = 64, PR = 18, PT = 18, PB = 34;
+      var x0 = PL, x1 = W - PR, y0 = PT, y1 = H - PB;
+      function T(s){ s = String(s); return new Date(s.replace(' ', 'T') + (s.length === 16 ? 'Z' : '')).getTime(); }
+      var t0 = T(pts[0][0]), t1 = T(pts[pts.length - 1][0]);
+      if(!(t1 > t0)) t1 = t0 + 1;
+      function X(ms){ return x0 + (ms - t0) / (t1 - t0) * (x1 - x0); }
+      function Y(v){ return y1 - (v - vmin) / (vmax - vmin) * (y1 - y0); }
+      var line = pts.map(function(p, i){ return (i ? 'L' : 'M') + X(T(p[0])).toFixed(1) + ' ' + Y(p[1]).toFixed(1); }).join(' ');
+      var fillP = line + ' L' + x1.toFixed(1) + ' ' + y1 + ' L' + x0.toFixed(1) + ' ' + y1 + ' Z';
+      var yt = '', i, v, ms;
+      for(i = 0; i <= 4; i++){
+        v = vmin + (vmax - vmin) * i / 4;
+        yt += '<line x1="' + x0 + '" y1="' + Y(v).toFixed(1) + '" x2="' + x1 + '" y2="' + Y(v).toFixed(1) + '" stroke="rgba(255,255,255,.06)"/>' +
+              '<text x="' + (PL - 10) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">$' + Math.round(v / 1000) + 'K</text>';
+      }
+      var xt = '';
+      for(i = 0; i <= 3; i++){
+        ms = t0 + (t1 - t0) * i / 3;
+        xt += '<text x="' + X(ms).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' +
+              new Date(ms).toLocaleDateString('en-US', {month:'short', day:'numeric'}) + '</text>';
+      }
+      host.innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Realized equity curve for this run, with the pass target line.">' +
+        yt + xt +
+        '<path d="' + fillP + '" fill="rgba(232,193,90,.06)"/>' +
+        '<line x1="' + x0 + '" y1="' + Y(target).toFixed(1) + '" x2="' + x1 + '" y2="' + Y(target).toFixed(1) + '" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 5" opacity=".7"/>' +
+        '<path d="' + line + '" fill="none" stroke="var(--warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '</svg>';
+      return;
+    }
+    if(host.dataset.done) return;
     host.dataset.done = '1';
 
     var W = 800, H = 300, PL = 56, PR = 18, PT = 18, PB = 34;
@@ -1321,7 +1354,35 @@ svg.ico{width:18px;height:18px}
 
   function drawHistory(){
     var host = $('#histChart');
-    if(!host || host.dataset.done) return;
+    if(!host) return;
+    var real = (LAST_STATE && LAST_STATE.monthly && LAST_STATE.monthly.length) ? LAST_STATE.monthly.slice(-12) : null;
+    if(real && real.length){
+      var W = 800, H = 240, PL = 42, PR = 16, PT = 14, PB = 30;
+      var n = real.length, gap = 12, bw = (W - PL - PR - gap * (n - 1)) / n;
+      var wrs = real.map(function(m){ return m.wr; });
+      var lo = Math.min(50, Math.min.apply(null, wrs)) - 2;
+      var hi = Math.max(62, Math.max.apply(null, wrs)) + 2;
+      function Yv(v){ return (H - PB) - (v - lo) / (hi - lo) * (H - PT - PB); }
+      var yticks = '';
+      [50, 54, 58, 62].forEach(function(v){
+        if(v < lo || v > hi) return;
+        yticks += '<line x1="' + PL + '" y1="' + Yv(v).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Yv(v).toFixed(1) + '" stroke="rgba(255,255,255,.06)"/>' +
+                  '<text x="' + (PL - 8) + '" y="' + (Yv(v) + 4).toFixed(1) + '" text-anchor="end">' + v + '</text>';
+      });
+      var bars = real.map(function(m, i){
+        var x = PL + i * (bw + gap), y = Yv(m.wr), h = (H - PB) - y;
+        var label = new Date(String(m.month) + '-15T00:00:00Z').toLocaleDateString('en-US', {month:'short'});
+        var fillc = (i === n - 1) ? 'var(--accent)' : 'rgba(255,255,255,.16)';
+        return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(1, h).toFixed(1) + '" rx="3" fill="' + fillc + '"><title>' + m.month + ' · ' + m.wr + '% WR · ' + m.n + ' trades</title></rect>' +
+               '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + label + '</text>';
+      }).join('');
+      host.innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Live win rate by month across all terminal runs; dashed line marks the 58.2 percent backtest prior.">' +
+        yticks + bars +
+        (58.2 >= lo && 58.2 <= hi ? '<line x1="' + PL + '" y1="' + Yv(58.2).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Yv(58.2).toFixed(1) + '" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4 5" opacity=".8"/>' : '') +
+        '</svg>';
+      return;
+    }
+    if(host.dataset.done) return;
     host.dataset.done = '1';
 
     var W = 800, H = 240, PL = 42, PR = 16, PT = 14, PB = 30;
@@ -1524,6 +1585,71 @@ svg.ico{width:18px;height:18px}
   }
   function fmtSigned(n){ return (n >= 0 ? '+' : '') + Math.round(n).toLocaleString('en-US'); }
 
+  var LAST_STATE = null;
+
+  function renderLog(s){
+    var host = $('#runLog');
+    if(!host) return;
+    var items = [];
+    (s.closed_trades || []).forEach(function(t){
+      items.push({ ts: String(t.closed_at || ''),
+        txt: 'Closed ' + (t.dir === 'LONG' ? 'Long' : 'Short') + ' ' + t.symbol + ' · ' +
+             (t.result === 'SL' ? 'Stop hit' : 'Target hit') + ' ' + ((t.r || 0) >= 0 ? '+' : '') + Number(t.r || 0).toFixed(2) +
+             'R (' + ((t.dollars || 0) >= 0 ? '+$' : '-$') + Math.abs(Math.round(t.dollars || 0)).toLocaleString('en-US') + ')' });
+    });
+    (s.open_trades || []).forEach(function(t){
+      items.push({ ts: String(t.opened_at || ''),
+        txt: 'Opened ' + (t.dir === 'LONG' ? 'Long' : 'Short') + ' ' + t.symbol + ' @ ' + Number(t.entry).toPrecision(6) +
+             ' · target +' + Number(t.r_target || 0).toFixed(2) + 'R' });
+    });
+    var ch = s.challenge;
+    if(ch && ch.reason) items.push({ ts: String(ch.ended_at || ''), txt: 'Run ' + (ch.status === 'passed' ? 'PASSED' : 'BREACHED') + ' — ' + ch.reason });
+    if(ch && ch.status === 'running' && ch.id !== 0) items.push({ ts: String(ch.started_at || ''), txt: 'Challenge armed — $' + Math.round(ch.size / 1000) + 'K · ' + ch.mode + ' mode' });
+    items.sort(function(a, b){ return a.ts < b.ts ? 1 : -1; });
+    if(!items.length){
+      host.innerHTML = '<div class="log-item"><span class="log-time">—</span><span class="log-text">No engine events yet. Arm a challenge or hit the engine pill to scan.</span></div>';
+      return;
+    }
+    host.innerHTML = items.slice(0, 14).map(function(it){
+      return '<div class="log-item"><span class="log-time">' + it.ts.slice(11, 16) + '</span><span class="log-text">' + it.txt + '</span></div>';
+    }).join('');
+  }
+
+  function fillHistoryStats(s){
+    var chs = (s.challenges || []).slice();
+    if(s.challenge && s.challenge.id === 0) chs.push(s.challenge);  // include the live bot account
+    var n = chs.length, tw = 0, tn = 0, rsum = 0, pnl = 0, ntr = 0;
+    chs.forEach(function(c){
+      pnl += (c.profit || 0);
+      rsum += (c.r_total || 0);
+      ntr += (c.n_trades || 0);
+      if(c.winrate != null && c.n_trades){ tw += (c.winrate / 100) * c.n_trades; tn += c.n_trades; }
+    });
+    var set = function(id, txt){ var el = $(id); if(el) el.textContent = txt; };
+    set('#hsRuns', String(n));
+    var wr = tn ? Math.round(100 * tw / tn) : null;
+    var wrEl = $('#hsWr'); if(wrEl) wrEl.innerHTML = (wr == null ? '—' : wr) + '<span class="unit">%</span>';
+    set('#hsR', ntr ? (rsum / ntr).toFixed(3) + 'R' : '—');
+    var pe = $('#hsPnl'); if(pe) pe.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(Math.round(pnl)).toLocaleString('en-US');
+    var hs = $('#histSub'); if(hs) hs.textContent = 'Across ' + n + ' run' + (n === 1 ? '' : 's') + ' on this terminal · live results';
+  }
+
+  function fillSessions(s){
+    var map = {};
+    (s.sessions || []).forEach(function(x){ map[x.name] = x; });
+    [['Asian', 'sessAsia'], ['London', 'sessLondon'], ['New York', 'sessNY']].forEach(function(pair){
+      var d = map[pair[0]];
+      var w = $('#' + pair[1] + 'Wr'), m = $('#' + pair[1] + 'Meta');
+      if(!d || !d.n){
+        if(w) w.textContent = 'Waiting for data';
+        if(m) m.textContent = '0 trades · insufficient evidence';
+        return;
+      }
+      if(w) w.textContent = d.n + ' trades · WR ' + (d.wr == null ? '—' : d.wr + '%');
+      if(m) m.textContent = 'Net ' + (d.r >= 0 ? '+' : '') + d.r + 'R' + (d.n < 30 ? ' · insufficient evidence' : ' · confidence building');
+    });
+  }
+
   function syncTg(on, silent){
     var tgBtn = $('#tgToggle');
     tgBtn.setAttribute('aria-checked', on ? 'true' : 'false');
@@ -1557,6 +1683,7 @@ svg.ico{width:18px;height:18px}
 
   function applyState(s){
     API_ONLINE = true;
+    LAST_STATE = s;
     var foot = $('#footMode'); if(foot) foot.textContent = 'Live engine connected';
     if(s.settings && typeof s.settings.telegram_enabled === 'boolean') syncTg(s.settings.telegram_enabled, true);
 
@@ -1605,6 +1732,24 @@ svg.ico{width:18px;height:18px}
       });
       renderPast();
     }
+
+    var ch2 = s.challenge || {};
+    var dsub = $('#dashSub');
+    if(dsub) dsub.textContent = ch2.id === 0
+      ? 'Live bot account · engine trading'
+      : ('$' + Math.round(ch2.size / 1000) + 'K ' + ch2.mode + ' · ' + (ch2.status || '—') + (ch2.reason ? ' · ' + ch2.reason : ''));
+    var ppill = $('#projPill');
+    if(ppill) ppill.innerHTML = '<span class="dot' + (ch2.status === 'running' ? ' dot-on' : '') + '"></span>' + (ch2.status || '—');
+    var psub = $('#projSub');
+    if(psub) psub.textContent = ch2.id === 0 ? 'Realized balance · live bot account' : 'Realized balance · ' + (ch2.days || 0) + ' days simulated';
+    var sid = $('#sessId');
+    if(sid) sid.textContent = 'Run #' + ch2.id + ' · ' + (ch2.status || '—');
+    renderLog(s);
+    fillHistoryStats(s);
+    fillSessions(s);
+    var cur = $('.nav-item.is-active');
+    if(cur && cur.dataset.view === 'dashboard') drawProjection();
+    else if(cur && cur.dataset.view === 'history') drawHistory();
   }
 
   function hydrate(attempt){
