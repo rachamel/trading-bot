@@ -69,12 +69,21 @@ Notes: Neon's free tier suspends idle compute — the first query after a long
 pause takes ~1–3 s to wake. Also make sure Render's **Auto-Deploy** stays
 **Off**, since your bot pushes `trade_log.json` commits a few times a day.
 
-## 3. Wire the hourly heartbeat
+## 3. Heartbeats (built-in — no setup needed)
 
-In GitHub → repo → **Settings → Secrets and variables → Actions**:
-- `RENDER_API_URL` = `https://4h-bot-terminal.onrender.com`
+Two GitHub Actions workflows keep everything alive (free — the repo is public):
 
-That activates `terminal-scan.yml` (runs :10 past every hour).
+- **`keep-alive.yml`** — pings `/api/health` every 10 minutes so the Render
+  service never sleeps. No secrets needed; the URL is baked in.
+- **`terminal-scan.yml`** — hits `/api/scan` hourly (:10 past the hour) so LIVE
+  challenges keep trading even when nobody has the tab open. Uses the
+  `RENDER_API_URL` secret if you set it, otherwise the built-in URL.
+
+> Heads-up: keep-alive runs ~144 times/day, so your Actions tab will be busy —
+> that's normal. If you ever make the repo private, switch to
+> [cron-job.org](https://cron-job.org) (free) pinging the same health URL
+> instead, since public-repo schedules cost nothing but private ones burn
+> Actions minutes.
 
 ## 4. Connect a real prop account (when ready)
 

@@ -16,9 +16,9 @@ import os
 import json
 from datetime import timedelta
 
-# --- CONFIGURATION (HARDCODED BY OWNER'S CHOICE - REPO IS PRIVATE) ---
-TELEGRAM_BOT_TOKEN = "8712031624:AAH8GKakWgeuFaR8VvKeox2TbusGdZwE_xE"
-TELEGRAM_CHAT_ID = "5858961660"
+# --- CONFIGURATION (from environment / GitHub Action secrets — repo is public, nothing sensitive in code) ---
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # Prop firm accounts: 200000.0 / 0.0025 (0.25% risk)
 # Personal $1,000 account: change to 1000.0 / 0.005 (0.5% risk)
@@ -59,6 +59,9 @@ def save_log(log):
 
 # --- TELEGRAM ---
 def send_telegram(message):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠️ Telegram not configured (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID unset)")
+        return
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}
     try:

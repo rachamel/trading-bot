@@ -2,10 +2,8 @@ name: Terminal engine scan
 
 # Hourly heartbeat for the Prop Terminal backend on Render.
 # Keeps LIVE challenges trading even when no one has the tab open.
-# Set the RENDER_API_URL repo secret to your Render URL, e.g.
-#   https://your-service.onrender.com
-# If the secret is not set, this workflow exits quietly (the main bot
-# workflow in schedule.yml keeps running independently either way).
+# Uses the RENDER_API_URL repo secret if set, else the built-in URL.
+# (The separate keep-alive.yml handles anti-sleep; this one drives trades.)
 
 on:
   schedule:
@@ -17,10 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping terminal /api/scan
-        if: ${{ env.RENDER_API_URL != '' }}
         env:
           RENDER_API_URL: ${{ secrets.RENDER_API_URL }}
         run: |
+          RENDER_API_URL="${RENDER_API_URL:-https://fourh-bot-terminal.onrender.com}"
           echo "Scanning $RENDER_API_URL/api/scan"
           curl -sS -X POST "$RENDER_API_URL/api/scan" -H "Content-Type: application/json" -o scan-result.json -w "HTTP %{http_code}\n"
           cat scan-result.json || true
