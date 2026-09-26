@@ -162,8 +162,10 @@ def book_open_trades(open_list):
 # ---------------- REPLAY — fast-forward a challenge through history ----------------
 
 def replay(size, rules, risk_pct, months=4, pairs=None):
-    """Run the exact Gate A engine over the last N months of 1h candles and apply prop rules.
-    rules = {target_pct, daily_pct, total_pct, min_days}. Returns the completed run."""
+    """Run the exact Gate A engine over history through the full prop career:
+    Phase 1 -> Phase 2 -> Funded. rules = {target_pct, target2_pct, funded_pct,
+    daily_pct, total_pct, min_days, min_days2}. Each phase resets the account
+    to its starting size when passed, like a real evaluation."""
     days = min(int(months * 30), 720)
     cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=days)
     data = {}
@@ -183,8 +185,20 @@ def replay(size, rules, risk_pct, months=4, pairs=None):
         time.sleep(0.1)
 
     idx = sorted(set().union(*[set(d.keys()) for d in data.values()])) if data else []
+    daily_pct = float(rules.get("daily_pct", 2.5))
+    total_pct = float(rules.get("total_pct", 5.0))
+    # The full prop career, in order: pass Phase 1, the account resets for Phase 2;
+    # pass Phase 2, the funded account trades toward the typed funded target.
+    stages = [
+        {"name": "Phase 1", "target": float(rules.get("target_pct", 10)), "min_days": int(rules.get("min_days", 5))},
+        {"name": "Phase 2", "target": float(rules.get("target2_pct", 5)), "min_days": int(rules.get("min_days2", 5))},
+        {"name": "Funded", "target": float(rules.get("funded_pct", 10)), "min_days": 0},
+    ]
+
     open_trades, closed = [], []
     balance = peak = float(size)
+    stage_i = 0
+    stage_start = idx[0] if idx else None
     day_pnl, cur_day = 0.0, None
     equity = []
     status, reason = "expired", "replay window ended"
@@ -195,6 +209,7 @@ def replay(size, rules, risk_pct, months=4, pairs=None):
         d = ts.date()
         if d != cur_day:
             cur_day, day_pnl = d, 0.0
+        elapsed = (ts - start).days
 
         # 1) book open trades on this bar (SL first)
         still = []
@@ -209,7 +224,7 @@ def replay(size, rules, risk_pct, months=4, pairs=None):
                 hit_sl, hit_tp = rec["high"] >= t["sl"], rec["low"] <= t["tp"]
             if hit_sl or hit_tp:
                 r = -1.0 if hit_sl else t["r_target"]
-                trade = {**t, "r": round(float(r), 3),
+                trade = {**t, "stage": stages[stage_i]["name"], "r": round(float(r), 3),
                         "dollars": round(float(r) * t["risk_dollars"], 2),
                         "result": "SL" if hit_sl else "TP", "closed_at": str(ts)}
                 closed.append(trade)
@@ -219,13 +234,13 @@ def replay(size, rules, risk_pct, months=4, pairs=None):
                 still.append(t)
         open_trades = still
 
-        # 2) guardrails — the typed-in rules
+        # 2) guardrails — typed max daily / max total drawdown, per phase
         peak = max(peak, balance)
-        if rules.get("daily_pct") and -day_pnl >= size * rules["daily_pct"] / 100:
-            status, reason = "breached", "daily loss limit"
+        if daily_pct and -day_pnl >= size * daily_pct / 100:
+            status, reason = "breached", f"{stages[stage_i]['name']} — max daily drawdown"
             break
-        if rules.get("total_pct") and (peak - balance) >= size * rules["total_pct"] / 100:
-            status, reason = "breached", "total drawdown limit"
+        if total_pct and (peak - balance) >= size * total_pct / 100:
+            status, reason = "breached", f"{stages[stage_i]['name']} — max total drawdown"
             break
 
         # 3) new Gate A signals this hour (one open per symbol, MAX_OPEN cap)
@@ -243,23 +258,58 @@ def replay(size, rules, risk_pct, months=4, pairs=None):
                 open_trades.append({**sig, "risk_dollars": round(balance * risk_pct / 100, 2),
                                     "opened_at": str(ts)})
 
-        # 4) pass check — typed-in target and min days
-        elapsed = (ts - start).days
-        if (balance - size) >= size * rules.get("target_pct", 10) / 100 and elapsed >= int(rules.get("min_days", 5)):
-            status, reason = "passed", "target reached"
-            break
-        equity.append([str(ts), round(balance, 2)])
+        # 4) phase pass check — typed target and min days for the current phase
+        st = stages[stage_i]
+        stage_days = (ts - stage_start).days if stage_start is not None else 0
+        if (balance - size) >= size * st["target"] / 100 and stage_days >= st["min_days"]:
+            # open positions close at the phase boundary (0R) — the account resets
+            for t in open_trades:
+                closed.append({**t, "stage": st["name"], "r": 0.0, "dollars": 0.0,
+                               "result": "PHASE-END", "closed_at": str(ts)})
+            open_trades = []
+            if stage_i == len(stages) - 1:
+                status, reason = "funded", f"{st['name']} target reached (+{100 * (balance - size) / size:.1f}%)"
+                break
+            stage_i += 1
+            balance = peak = float(size)
+            stage_start = ts
+            day_pnl = 0.0
+            equity.append([str(ts)[:16], round(balance, 2)])
+            continue
+
+        equity.append([str(ts)[:16], round(balance, 2)])
 
     if start and status == "expired":
         elapsed = (idx[-1] - start).days
+        reason = f"window ended in {stages[stage_i]['name']}"
 
     wins = [t for t in closed if t["r"] > 0]
     gw = sum(t["r"] for t in wins)
     gl = abs(sum(t["r"] for t in closed if t["r"] <= 0))
+
+    # per-phase aggregates from the trade ledger
+    stage_rows = []
+    for si, st in enumerate(stages):
+        tr = [t for t in closed if t.get("stage") == st["name"]]
+        sw = [t for t in tr if t["r"] > 0]
+        tw = sum(t["r"] for t in sw)
+        tl = abs(sum(t["r"] for t in tr if t["r"] <= 0))
+        st_status = "passed" if (si < stage_i or (status == "funded" and si == stage_i)) else ("active" if si == stage_i else "pending")
+        stage_rows.append({
+            "name": st["name"], "target_pct": st["target"], "status": st_status,
+            "n_trades": len(tr),
+            "winrate": round(100 * len(sw) / len(tr), 1) if tr else None,
+            "pf": round(tw / tl, 2) if tl > 0 else (99.9 if tw > 0 else None),
+            "r_total": round(tw - tl, 2),
+        })
+
     return {
         "status": status, "reason": reason,
+        "stage": stages[stage_i]["name"], "stages": stage_rows,
         "size": size, "risk_pct": risk_pct, "rules": rules,
-        "balance": round(balance, 2), "peak": round(peak, 2), "profit": round(balance - size, 2),
+        "balance": round(balance, 2), "peak": round(peak, 2),
+        "profit": round(balance - size, 2),
+        "profit_pct": round(100 * (balance - size) / size, 2),
         "days": elapsed, "n_trades": len(closed) + len(open_trades),
         "winrate": round(100 * len(wins) / len(closed), 1) if closed else None,
         "pf": round(gw / gl, 2) if gl > 0 else (99.9 if gw > 0 else None),

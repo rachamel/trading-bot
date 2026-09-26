@@ -486,7 +486,7 @@ svg.ico{width:18px;height:18px}
           <div class="hero-copy">
             <p class="eyebrow"><span class="dot dot-on"></span>Challenge setup · Step 1 of 5</p>
             <h1 class="hero-title" id="chTitle">Prove the edge.<br>Keep the account.</h1>
-            <p class="hero-sub">Every prop rule the bot must respect — account size, daily loss, total drawdown and pass target — is resolved before a single order fires. <span class="accent-text">The rules come first.</span></p>
+            <p class="hero-sub">Every prop rule the bot must respect — account size, max daily and max total drawdown, Phase 1 and Phase 2 targets, min days and the funded target — is resolved before a single order fires. <span class="accent-text">The rules come first.</span></p>
           </div>
           <div class="hero-aside card">
             <div class="od-row">
@@ -590,12 +590,15 @@ svg.ico{width:18px;height:18px}
                 <div>
                   <div class="control-head"><span class="field-label">Prop firm rules — type yours in</span><span class="tag">Editable</span></div>
                   <div class="rules-grid">
-                    <div><label for="ruleTarget">Target %</label><input id="ruleTarget" type="number" step="0.5" min="1" max="50" value="10"></div>
-                    <div><label for="ruleDaily">Max daily %</label><input id="ruleDaily" type="number" step="0.5" min="0.5" max="20" value="2.5"></div>
-                    <div><label for="ruleTotal">Max total %</label><input id="ruleTotal" type="number" step="0.5" min="0.5" max="50" value="5"></div>
-                    <div><label for="ruleDays">Min days</label><input id="ruleDays" type="number" step="1" min="0" max="30" value="5"></div>
+                    <div><label for="ruleTarget">Phase 1 target %</label><input id="ruleTarget" type="number" step="0.5" min="1" max="50" value="10"></div>
+                    <div><label for="ruleTarget2">Phase 2 target %</label><input id="ruleTarget2" type="number" step="0.5" min="1" max="50" value="5"></div>
+                    <div><label for="ruleFunded">Funded target %</label><input id="ruleFunded" type="number" step="0.5" min="1" max="100" value="10"></div>
+                    <div><label for="ruleDaily">Max daily drawdown %</label><input id="ruleDaily" type="number" step="0.5" min="0.5" max="20" value="2.5"></div>
+                    <div><label for="ruleTotal">Max total drawdown %</label><input id="ruleTotal" type="number" step="0.5" min="0.5" max="50" value="5"></div>
+                    <div><label for="ruleDays">Phase 1 min days</label><input id="ruleDays" type="number" step="1" min="0" max="30" value="5"></div>
+                    <div><label for="ruleDays2">Phase 2 min days</label><input id="ruleDays2" type="number" step="1" min="0" max="30" value="5"></div>
                   </div>
-                  <p class="control-note">Guardrails, the pass predictor and the arm dialog follow <strong>your typed rules</strong>, not a preset.</p>
+                  <p class="control-note">The career runs in order: pass Phase 1, the account resets for Phase 2, then the funded account trades toward your funded target. Guardrails, the predictor and the arm dialog follow <strong>your typed rules</strong>.</p>
                 </div>
               </div>
 
@@ -616,10 +619,10 @@ svg.ico{width:18px;height:18px}
                 <svg class="card-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"/></svg>
               </div>
               <dl class="guard">
-                <div class="guard-row"><dt>Daily loss allowance</dt><dd id="gDaily">$5,000</dd></div>
-                <div class="guard-row"><dt>Total drawdown</dt><dd id="gTotal">$10,000</dd></div>
+                <div class="guard-row"><dt>Max daily drawdown</dt><dd id="gDaily">$5,000</dd></div>
+                <div class="guard-row"><dt>Max total drawdown</dt><dd id="gTotal">$10,000</dd></div>
                 <div class="guard-row"><dt>Effective risk per trade</dt><dd id="gRisk">$1,000</dd></div>
-                <div class="guard-row"><dt>Open trade limit</dt><dd id="gOpen">3</dd></div>
+                <div class="guard-row"><dt>Open trade limit</dt><dd id="gOpen">5</dd></div>
               </dl>
               <p class="guard-note">Breach any limit and the challenge closes automatically. Sample evaluation terms for the <strong id="gTier">$200K</strong> tier.</p>
             </section>
@@ -637,7 +640,7 @@ svg.ico{width:18px;height:18px}
           <div class="table-wrap">
             <table class="data-table">
               <thead>
-                <tr><th scope="col">Size</th><th scope="col">Target</th><th scope="col">Max daily</th><th scope="col">Max total</th><th scope="col">Min days</th><th scope="col">Bot pace</th></tr>
+                <tr><th scope="col">Size</th><th scope="col">Phase 1 tgt</th><th scope="col">Max daily DD</th><th scope="col">Max total DD</th><th scope="col">Min days</th><th scope="col">Bot pace</th></tr>
               </thead>
               <tbody id="rulesBody"></tbody>
             </table>
@@ -649,7 +652,7 @@ svg.ico{width:18px;height:18px}
           <svg class="callout-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-spark"/></svg>
           <div>
             <h2 class="callout-title" id="ppTitle">Pass predictor</h2>
-            <p class="callout-body">Monte Carlo over the engine's backtest prior (58.2% WR · 0.88R avg win · 4.4 trades/day): <strong id="ppChance">—%</strong> chance to pass within <strong id="ppDays">—</strong> days at <strong id="ppRisk">—%</strong> risk under your typed rules and the selected window. Guardrails close the run on any breach.</p>
+            <p class="callout-body">Monte Carlo over the engine's backtest prior (58.2% WR · 0.88R avg win · 4.4 trades/day): <strong id="ppChance">—%</strong> chance to reach the funded stage within <strong id="ppDays">—</strong> total days at <strong id="ppRisk">—%</strong> risk — Phase 1 → Phase 2 → Funded, under your typed rules and the selected window. Guardrails close the run on any breach.</p>
             <p class="callout-note">Illustrative — 400 simulated runs over the backtest prior.</p>
           </div>
         </section>
@@ -1035,6 +1038,21 @@ svg.ico{width:18px;height:18px}
   </div>
 </dialog>
 
+<dialog class="dialog" id="replayResult" aria-labelledby="rrTitle">
+  <div class="dialog-inner">
+    <div class="dialog-head">
+      <h2 id="rrTitle">Replay complete</h2>
+      <button class="icon-btn" type="button" id="rrClose" aria-label="Close"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <div id="rrBody"></div>
+    <p class="dialog-note">Full ledger on the Trades tab · equity curve on the Dashboard. The owner also gets a Telegram notification if enabled.</p>
+    <div class="dialog-actions">
+      <button class="btn-ghost" type="button" id="rrToDash">Open dashboard</button>
+      <button class="btn-primary" type="button" id="rrDone">Done</button>
+    </div>
+  </div>
+</dialog>
+
 <div class="toast" id="toast" role="status" aria-live="polite">
   <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>
   <span id="toastMsg">Challenge armed.</span>
@@ -1071,7 +1089,7 @@ svg.ico{width:18px;height:18px}
     {date:'2026-03-08', tier:'$50K',  result:'passed', days:13, r:'+10.5R'}
   ];
 
-  var state = {tier:'200k', risk:0.25, mode:'replay', months:12, filter:'all', gateD:false, rules:{target:10, daily:2.5, total:5, days:5}};
+  var state = {tier:'200k', risk:0.25, mode:'replay', months:12, filter:'all', gateD:false, rules:{target:10, target2:5, funded:10, daily:2.5, total:5, days:5, days2:5}};
 
   function $(s,r){ return (r||document).querySelector(s); }
   function $$(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); }
@@ -1087,9 +1105,9 @@ svg.ico{width:18px;height:18px}
       var on = t.id === state.tier;
       return '<tr tabindex="0" role="button" data-tier="' + t.id + '" class="' + (on?'is-selected':'') + '" aria-pressed="' + on + '">' +
         '<td data-label="Size"><span class="od-nowrap">' + t.label + '</span></td>' +
-        '<td data-label="Target"><span class="od-nowrap">' + money(t.target) + '</span></td>' +
-        '<td data-label="Max daily"><span class="od-nowrap">' + money(t.daily) + '</span></td>' +
-        '<td data-label="Max total"><span class="od-nowrap">' + money(t.total) + '</span></td>' +
+        '<td data-label="Phase 1 tgt"><span class="od-nowrap">' + money(t.target) + '</span></td>' +
+        '<td data-label="Max daily DD"><span class="od-nowrap">' + money(t.daily) + '</span></td>' +
+        '<td data-label="Max total DD"><span class="od-nowrap">' + money(t.total) + '</span></td>' +
         '<td data-label="Min days"><span class="od-nowrap">' + t.minDays + 'd</span></td>' +
         '<td data-label="Bot pace"><span class="od-nowrap">' + t.pace + '</span></td>' +
         '</tr>';
@@ -1125,8 +1143,8 @@ svg.ico{width:18px;height:18px}
     var body = $('#pastBody');
     if(!body) return;
     body.innerHTML = PAST.map(function(p){
-      var label = p.result === 'passed' ? 'Passed' : (p.result === 'breached' ? ('Breached' + (p.reason ? ' · ' + p.reason : '')) : p.result.charAt(0).toUpperCase() + p.result.slice(1));
-      var cls = p.result === 'passed' ? 'pos' : 'neg';
+      var label = p.result === 'funded' ? 'Funded' : (p.result === 'passed' ? 'Passed' : (p.result === 'breached' ? ('Breached' + (p.reason ? ' · ' + p.reason : '')) : p.result.charAt(0).toUpperCase() + p.result.slice(1)));
+      var cls = (p.result === 'passed' || p.result === 'funded') ? 'pos' : 'neg';
       return '<tr>' +
         '<td data-label="Date"><span class="od-nowrap">' + p.date + '</span></td>' +
         '<td data-label="Tier"><span class="od-nowrap">' + p.tier + '</span></td>' +
@@ -1137,34 +1155,44 @@ svg.ico{width:18px;height:18px}
     }).join('');
   }
 
-  /* ---------- honest pass predictor — Monte Carlo over the engine prior ---------- */
+  /* ---------- honest pass predictor — staged Monte Carlo over the engine prior ---------- */
   function monteCarlo(rules, riskPct, months){
     var winP = ENGINE_PRIOR.winP, winR = ENGINE_PRIOR.winR, freq = ENGINE_PRIOR.freq;
     var windowDays = Math.round(months * 30);
-    var runs = 400, passes = 0, passDays = [];
-    var totalFrac = rules.total / 100, dailyFrac = rules.daily / 100, targetFrac = rules.target / 100;
+    var runs = 400, fundedN = 0, fundDays = [];
+    var dailyFrac = rules.daily / 100, totalFrac = rules.total / 100;
+    var stages = [
+      {t: rules.target / 100, m: rules.days},
+      {t: rules.target2 / 100, m: rules.days2},
+      {t: rules.funded / 100, m: 0}
+    ];
     for(var i = 0; i < runs; i++){
-      var bal = 1, peak = 1, dayPnl = 0, d, k, ntr, R, breached = false;
-      for(d = 0; d < windowDays; d++){
-        dayPnl = 0;
-        ntr = Math.random() < (freq % 1) ? Math.ceil(freq) : Math.floor(freq);
-        for(k = 0; k < ntr; k++){
-          R = Math.random() < winP ? winR : -1;
-          bal += bal * (R * riskPct / 100);
-          dayPnl += R;
-          if(bal > peak) peak = bal;
-          if((peak - bal) >= totalFrac){ breached = true; break; }
-          if((-dayPnl * riskPct / 100) >= dailyFrac){ breached = true; break; }
+      var day = 0, si = 0, ended = false;
+      while(si < stages.length && day < windowDays && !ended){
+        var bal = 1, peak = 1, stageDays = 0, passed = false;
+        while(day < windowDays){
+          var dayPnl = 0;
+          stageDays++;
+          var ntr = Math.random() < (freq % 1) ? Math.ceil(freq) : Math.floor(freq);
+          for(var k = 0; k < ntr; k++){
+            var R = Math.random() < winP ? winR : -1;
+            bal += bal * (R * riskPct / 100);
+            dayPnl += R;
+            if(bal > peak) peak = bal;
+            if((peak - bal) >= totalFrac || (-dayPnl * riskPct / 100) >= dailyFrac){ ended = true; break; }
+          }
+          day++;
+          if(ended) break;
+          if(bal >= 1 + stages[si].t && stageDays >= stages[si].m){ passed = true; break; }
         }
-        if(breached) break;
-        if(bal >= 1 + targetFrac && (d + 1) >= rules.days){
-          passes++; passDays.push(d + 1); break;
-        }
+        if(ended || !passed) break;
+        si++;
+        if(si >= stages.length){ fundedN++; fundDays.push(day); }
       }
     }
-    passDays.sort(function(a, b){ return a - b; });
-    var med = passDays.length ? passDays[Math.floor(passDays.length / 2)] : '—';
-    return { chance: Math.round(100 * passes / runs), days: med };
+    fundDays.sort(function(a, b){ return a - b; });
+    var med = fundDays.length ? fundDays[Math.floor(fundDays.length / 2)] : '—';
+    return { chance: Math.round(100 * fundedN / runs), days: med };
   }
 
   function syncUI(){
@@ -1206,24 +1234,28 @@ svg.ico{width:18px;height:18px}
     var wTag = $('#windowTag'); if(wTag) wTag.textContent = state.months + ' months';
     var wNote = $('#windowNote');
     if(wNote){
-      var expDays = Math.ceil(state.rules.target / Math.max(0.05, state.risk * 0.405));
-      wNote.textContent = '≈' + (state.months * 30) + ' days of candles. At the engine\u2019s prior pace, a ' + state.rules.target + '% target at ' + state.risk + '% risk needs about ' + expDays + ' trading days — pick a window with room.';
+      var expDays = Math.ceil((state.rules.target + state.rules.target2 + state.rules.funded) / Math.max(0.05, state.risk * 0.405));
+      wNote.textContent = '≈' + (state.months * 30) + ' days of candles. At the engine\u2019s prior pace, the full career (Phase 1 + Phase 2 + Funded) at ' + state.risk + '% risk needs about ' + expDays + ' trading days — pick a window with room.';
     }
 
     renderTable();
   }
 
   function tierRules(t){
-    return {target: Math.round(t.target/t.size*1000)/10,
+    var tgt = Math.round(t.target/t.size*1000)/10;
+    return {target: tgt, target2: Math.round(tgt*5)/10, funded: 10,
             daily: Math.round(t.daily/t.size*1000)/10,
             total: Math.round(t.total/t.size*1000)/10,
-            days: t.minDays};
+            days: t.minDays, days2: 5};
   }
   function fillRuleInputs(){
     $('#ruleTarget').value = state.rules.target;
+    $('#ruleTarget2').value = state.rules.target2;
+    $('#ruleFunded').value = state.rules.funded;
     $('#ruleDaily').value = state.rules.daily;
     $('#ruleTotal').value = state.rules.total;
     $('#ruleDays').value = state.rules.days;
+    $('#ruleDays2').value = state.rules.days2;
   }
   function selectTier(id, keepRules){
     if(id === state.tier) return;
@@ -1260,12 +1292,12 @@ svg.ico{width:18px;height:18px}
     el.addEventListener('click', function(){ state.months = parseInt(el.dataset.window, 10); syncUI(); });
   });
 
-  ['Target','Daily','Total','Days'].forEach(function(k){
+  ['Target','Target2','Funded','Daily','Total','Days','Days2'].forEach(function(k){
     var el = $('#rule' + k);
     el.addEventListener('input', function(){
       var v = parseFloat(el.value);
       if(!isNaN(v) && v > 0){
-        state.rules[k.toLowerCase()] = (k === 'Days') ? Math.round(v) : v;
+        state.rules[k.toLowerCase()] = (k === 'Days' || k === 'Days2') ? Math.round(v) : v;
         syncUI();
       }
     });
@@ -1465,10 +1497,10 @@ svg.ico{width:18px;height:18px}
   function openDialog(){
     var t = tier(state.tier);
     $('#dlgTier').textContent = t.label;
-    $('#dlgTarget').textContent = money(Math.round(t.size * state.rules.target / 100)) + ' (+' + state.rules.target + '%)';
+    $('#dlgTarget').textContent = 'P1 ' + money(Math.round(t.size * state.rules.target / 100)) + ' · P2 ' + money(Math.round(t.size * state.rules.target2 / 100)) + ' · Funded ' + money(Math.round(t.size * state.rules.funded / 100));
     $('#dlgRisk').textContent = state.risk + '% · ' + money(riskAmount(t)) + ' / trade';
     $('#dlgMode').textContent = state.mode === 'replay' ? 'Replay fast · ' + state.months + ' months' : 'Live';
-    $('#dlgGuard').textContent = money(Math.round(t.size * state.rules.daily / 100)) + ' daily · ' + money(Math.round(t.size * state.rules.total / 100)) + ' total';
+    $('#dlgGuard').textContent = money(Math.round(t.size * state.rules.daily / 100)) + ' daily dd · ' + money(Math.round(t.size * state.rules.total / 100)) + ' total dd';
     if(typeof dlg.showModal === 'function') dlg.showModal();
     else dlg.setAttribute('open', '');
   }
@@ -1490,15 +1522,15 @@ svg.ico{width:18px;height:18px}
       risk_pct: state.risk,
       mode: state.mode,
       months: state.months,
-      rules: {target_pct: state.rules.target, daily_pct: state.rules.daily, total_pct: state.rules.total, min_days: state.rules.days}
+      rules: {target_pct: state.rules.target, target2_pct: state.rules.target2, funded_pct: state.rules.funded, daily_pct: state.rules.daily, total_pct: state.rules.total, min_days: state.rules.days, min_days2: state.rules.days2}
     };
     api('/challenge', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})
       .then(function(res){
-        var ch = res.challenge || {};
-        var msg = state.mode === 'replay'
-          ? 'Replay complete — ' + (ch.status || 'done') + ' · ' + (ch.n_trades || 0) + ' trades · P&L ' + fmtSigned(ch.profit || 0)
-          : 'Challenge armed — ' + t.label + ' · engine scans hourly on the 1H close.';
-        showToast(msg);
+        if(state.mode === 'replay' && res.run){
+          showReplayResult(res);
+        } else {
+          showToast('Challenge armed — ' + t.label + ' · engine scans hourly on the 1H close.');
+        }
       })
       .catch(function(){
         showToast('Backend offline — challenge stored in demo mode.');
@@ -1513,6 +1545,56 @@ svg.ico{width:18px;height:18px}
         go('dashboard');
       });
   });
+
+  /* ---------- replay results popup (in-browser — every user sees their own run) ---------- */
+  var rrDlg = $('#replayResult');
+  function showReplayResult(res){
+    var run = res.run || {};
+    var statusText = run.status === 'funded' ? 'FUNDED 🎉' : (run.status === 'passed' ? 'Passed' : (run.status === 'breached' ? 'Breached' : 'Expired'));
+    var statusCls = (run.status === 'funded' || run.status === 'passed') ? 'pos' : (run.status === 'breached' ? 'neg' : '');
+    var stageRows = (run.stages || []).map(function(s){
+      var stTxt = s.status === 'passed' ? '✓ Passed' : (s.status === 'active' ? 'In progress' : 'Not reached');
+      var extra = s.status === 'passed' ? ' · ' + s.n_trades + ' trades · ' + (s.winrate != null ? s.winrate + '% WR' : '—') : '';
+      return '<div class="dlg-row"><dt>' + s.name + ' · target ' + s.target_pct + '%</dt><dd class="' + (s.status === 'passed' ? 'pos' : '') + '">' + stTxt + extra + '</dd></div>';
+    }).join('');
+    var pts = run.equity || [];
+    var spark = '';
+    if(pts.length > 1){
+      var lo = Math.min.apply(null, pts.map(function(p){ return p[1]; }));
+      var hi = Math.max.apply(null, pts.map(function(p){ return p[1]; }));
+      if(hi <= lo) hi = lo + 1;
+      var w = 460, h = 70;
+      var path = pts.map(function(p, i){
+        var x = (i / (pts.length - 1)) * w;
+        var y = h - ((p[1] - lo) / (hi - lo)) * h;
+        return (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1);
+      }).join(' ');
+      spark = '<svg viewBox="0 0 ' + w + ' ' + h + '" style="width:100%;height:70px;margin-top:12px" role="img" aria-label="Equity curve of the run">' +
+              '<path d="' + path + '" fill="none" stroke="var(--warn)" stroke-width="1.6"/>' +
+              '<text x="2" y="10" fill="var(--faint)" font-size="9" font-family="ui-monospace,monospace">$' + Math.round(hi).toLocaleString('en-US') + '</text>' +
+              '<text x="2" y="' + (h - 2) + '" fill="var(--faint)" font-size="9" font-family="ui-monospace,monospace">$' + Math.round(lo).toLocaleString('en-US') + '</text>' +
+              '</svg>';
+    }
+    $('#rrTitle').textContent = 'Replay complete — ' + statusText;
+    $('#rrBody').innerHTML =
+      '<p class="micro-note" style="margin:2px 0 6px;color:' + (statusCls === 'pos' ? 'var(--accent)' : (statusCls === 'neg' ? 'var(--danger)' : 'var(--dim)')) + '">' +
+      (run.reason || '') + ' · reached: ' + (run.stage || '—') + '</p>' +
+      '<dl class="dlg-list">' + stageRows +
+      '<div class="dlg-row"><dt>Trades</dt><dd>' + (run.n_trades || 0) + ' · WR ' + (run.winrate != null ? run.winrate + '%' : '—') + ' · PF ' + (run.pf != null ? run.pf : '—') + '</dd></div>' +
+      '<div class="dlg-row"><dt>Net R</dt><dd>' + ((run.r_total || 0) >= 0 ? '+' : '') + (run.r_total || 0) + 'R</dd></div>' +
+      '<div class="dlg-row"><dt>' + (run.stage || 'Final') + ' P&L</dt><dd>' + ((run.profit_pct || 0) >= 0 ? '+' : '') + (run.profit_pct || 0) + '% · ' + money(Math.round(run.balance || 0)) + '</dd></div>' +
+      '<div class="dlg-row"><dt>Days simulated</dt><dd>' + (run.days || 0) + '</dd></div>' +
+      '</dl>' + spark;
+    if(typeof rrDlg.showModal === 'function') rrDlg.showModal();
+    else rrDlg.setAttribute('open', '');
+  }
+  function closeReplayResult(){
+    if(typeof rrDlg.close === 'function') rrDlg.close();
+    else rrDlg.removeAttribute('open');
+  }
+  $('#rrClose').addEventListener('click', closeReplayResult);
+  $('#rrDone').addEventListener('click', closeReplayResult);
+  $('#rrToDash').addEventListener('click', function(){ closeReplayResult(); go('dashboard'); });
 
   var toast = $('#toast'), toastTimer;
   function showToast(msg){

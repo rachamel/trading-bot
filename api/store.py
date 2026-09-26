@@ -108,7 +108,7 @@ def init():
     # IMPORTANT: each runs in its own transaction — in Postgres, a failed
     # statement aborts the whole transaction, so a duplicate-column error
     # here would otherwise poison the init and crash the service.
-    for col in ("reason", "equity"):
+    for col, typ in (("reason", "TEXT"), ("equity", "TEXT"), ("stage", "INTEGER")):
         with _lock, db() as c:
             try:
                 if PG:
@@ -119,7 +119,7 @@ def init():
                     have = c.execute(
                         "SELECT 1 FROM pragma_table_info('challenge') WHERE name=?", (col,)).fetchone()
                 if not have:
-                    c.execute(f"ALTER TABLE challenge ADD COLUMN {col} TEXT")
+                    c.execute(f"ALTER TABLE challenge ADD COLUMN {col} {typ}")
             except Exception as e:
                 print(f"[store] migration '{col}' skipped: {e}")
     seed_from_log()
@@ -211,6 +211,15 @@ def backdate_start(cid, days):
     started = (datetime.now(timezone.utc) - timedelta(days=int(days))).isoformat()
     with _lock, db() as c:
         c.execute(q("UPDATE challenge SET started_at=%s WHERE id=%s"), (started, cid))
+
+
+def reset_stage(cid, stage):
+    """Phase passed: advance to the next stage and reset balance + drawdown tracking."""
+    with _lock, db() as c:
+        c.execute(
+            q("UPDATE challenge SET stage=%s, balance=size, peak_balance=size WHERE id=%s"),
+            (stage, cid),
+        )
 
 
 def past_challenges(limit=10):

@@ -39,10 +39,13 @@ def _startup():
 # ---------------- models ----------------
 
 class Rules(BaseModel):
-    target_pct: float = 10.0
-    daily_pct: float = 2.5
-    total_pct: float = 5.0
-    min_days: int = 5
+    target_pct: float = 10.0        # Phase 1 target
+    target2_pct: float = 5.0         # Phase 2 target
+    funded_pct: float = 10.0         # Funded stage profit target
+    daily_pct: float = 2.5           # Max daily drawdown
+    total_pct: float = 5.0           # Max total drawdown
+    min_days: int = 5                # Phase 1 min days
+    min_days2: int = 5               # Phase 2 min days
 
 
 class ChallengeIn(BaseModel):
@@ -91,6 +94,7 @@ def _summary(ch):
         "id": ch["id"], "size": size, "risk_pct": ch["risk_pct"], "mode": ch["mode"],
         "rules": rules, "status": ch["status"],
         "reason": ch.get("reason"),
+        "stage": int(ch.get("stage") or 0),
         "equity": (json.loads(ch["equity"]) if ch.get("equity") else None),
         "balance": round(ch["balance"], 2), "peak_balance": round(ch["peak_balance"], 2),
         "profit": round(profit, 2),
@@ -159,14 +163,14 @@ def arm_challenge(body: ChallengeIn):
         for t in run["open_left"]:
             store.add_trade(cid, t)
         store.build_equity(cid, body.size)
-        status = {"passed": "passed", "breached": "breached"}.get(run["status"], "expired")
+        status = {"passed": "passed", "breached": "breached", "funded": "funded"}.get(run["status"], "expired")
         store.complete_challenge(cid, status, run["balance"], run.get("peak", run["balance"]), run.get("reason"))
         store.backdate_start(cid, run["days"])
         telegram.notify(
             f"⚡ *Replay complete* — ${body.size:,.0f} @ {body.risk_pct}% risk\n"
-            f"Result: *{status.upper()}* ({run['reason']})\n"
+            f"Result: *{status.upper()}* ({run['reason']}) · reached: {run['stage']}\n"
             f"{run['n_trades']} trades · WR {run['winrate'] or 0}% · PF {run['pf'] or 0} · "
-            f"P&L {run['profit']:+,.0f} in {run['days']}d"
+            f"stage P&L {run['profit_pct']:+.1f}% in {run['days']}d"
         )
         return {"challenge": _summary(store.get_challenge(cid)), "run": run}
 
@@ -259,13 +263,29 @@ def scan():
                     result.setdefault("bridge_errors", []).append({"platform": plat, "error": str(e)})
                 break
 
-    # 5) pass check
+    # 5) phase pass check — Phase 1 -> Phase 2 -> Funded (typed rules)
+    stage = int(ch.get("stage") or 0)
+    stage_defs = [
+        ("Phase 1", rules.get("target_pct", 10), int(rules.get("min_days", 5))),
+        ("Phase 2", rules.get("target2_pct", 5), int(rules.get("min_days2", 5))),
+        ("Funded", rules.get("funded_pct", 10), 0),
+    ]
+    name, target_pct, min_days = stage_defs[min(stage, 2)]
     profit = balance - size
     days = (now - datetime.fromisoformat(ch["started_at"])).days if ch.get("started_at") else 0
-    if profit >= size * rules.get("target_pct", 10) / 100 and days >= int(rules.get("min_days", 5)):
-        store.complete_challenge(ch["id"], "passed", balance, None, f"target reached in {days}d")
-        telegram.notify(f"🎉 *CHALLENGE PASSED* — target reached in {days}d. Balance ${balance:,.0f}.")
-        result["challenge_status"] = "passed"
+    if profit >= size * float(target_pct) / 100 and days >= min_days:
+        if stage >= 2:
+            store.complete_challenge(ch["id"], "funded", balance, None, f"funded target reached in {days}d")
+            telegram.notify(f"🎉 *FUNDED* — funded target reached in {days}d. Balance ${balance:,.0f}.")
+            result["challenge_status"] = "funded"
+        else:
+            nxt = stage + 1
+            store.reset_stage(ch["id"], nxt)
+            telegram.notify(
+                f"✅ *{name} PASSED* in {days}d — {stage_defs[nxt][0]} starts now, "
+                f"balance reset to ${size:,.0f}."
+            )
+            result["challenge_status"] = f"stage_{nxt}"
 
     result["challenge"] = _summary(store.get_challenge(ch["id"]))
     return result
