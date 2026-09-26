@@ -69,21 +69,25 @@ Notes: Neon's free tier suspends idle compute — the first query after a long
 pause takes ~1–3 s to wake. Also make sure Render's **Auto-Deploy** stays
 **Off**, since your bot pushes `trade_log.json` commits a few times a day.
 
-## 3. Heartbeats (built-in — no setup needed)
+## 3. Heartbeats — cron-job.org (free, reliable intervals)
 
-Two GitHub Actions workflows keep everything alive (free — the repo is public):
+GitHub's scheduled workflows can be delayed under load, so the terminal uses
+[cron-job.org](https://cron-job.org) for precise, on-time pings. Create a free
+account (email only) and add **two cron jobs**:
 
-- **`keep-alive.yml`** — pings `/api/health` every 10 minutes so the Render
-  service never sleeps. No secrets needed; the URL is baked in.
-- **`terminal-scan.yml`** — hits `/api/scan` hourly (:10 past the hour) so LIVE
-  challenges keep trading even when nobody has the tab open. Uses the
-  `RENDER_API_URL` secret if you set it, otherwise the built-in URL.
+| Job | URL | Method | Schedule |
+|---|---|---|---|
+| **Keep backend awake** | `https://fourh-bot-terminal.onrender.com/api/state` | GET | Every 10 minutes (`*/10 * * * *`) |
+| **Hourly terminal scan** | `https://fourh-bot-terminal.onrender.com/api/scan` | POST | Every hour at minute 10 (`10 * * * *`) |
 
-> Heads-up: keep-alive runs ~144 times/day, so your Actions tab will be busy —
-> that's normal. If you ever make the repo private, switch to
-> [cron-job.org](https://cron-job.org) (free) pinging the same health URL
-> instead, since public-repo schedules cost nothing but private ones burn
-> Actions minutes.
+- Job 1 keeps Render warm 24/7 (the state call also touches Neon, so the database wakes too — no more "backend off", every visitor loads instantly).
+- Job 2 books fills and opens new trades on LIVE challenges even with nobody watching — this is the engine's trading heartbeat.
+- Both jobs trigger within seconds of their schedule, unlike GitHub's queue.
+
+Your main bot (`schedule.yml` on GitHub Actions) keeps running hourly as
+before — it produces `trade_log.json`, the trade memory the terminal seeds
+from. If you later want that off GitHub too, the terminal's `/api/scan`
+endpoint runs the same engine via cron job 2.
 
 ## 4. Connect a real prop account (when ready)
 
