@@ -125,6 +125,20 @@ def health():
     return {"ok": True, "server_time": datetime.now(timezone.utc).isoformat()}
 
 
+@app.get("/api/ping")
+def ping():
+    """Tiny keep-alive (~100B) that also touches the DB so Neon stays warm.
+    cron-job.org free cap rejects large bodies — /api/state would fail there."""
+    db_ok = False
+    try:
+        with store.db() as c:
+            row = c.execute("SELECT 1 AS x").fetchone()
+            db_ok = bool(row)
+    except Exception:
+        pass
+    return {"ok": True, "db": db_ok, "server_time": datetime.now(timezone.utc).isoformat()}
+
+
 @app.get("/api/state")
 def state():
     ch = _display_challenge()

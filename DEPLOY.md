@@ -77,7 +77,7 @@ account (email only) and add **two cron jobs**:
 
 | Job | URL | Method | Schedule |
 |---|---|---|---|
-| **Keep backend awake** | `https://fourh-bot-terminal.onrender.com/api/state` | GET | Every 10 minutes (`*/10 * * * *`) |
+| **Keep backend awake** | `https://fourh-bot-terminal.onrender.com/api/ping` | GET | Every 10 minutes (`*/10 * * * *`) |
 | **Hourly terminal scan** | `https://fourh-bot-terminal.onrender.com/api/scan` | POST | Every hour at minute 10 (`10 * * * *`) |
 
 - Job 1 keeps Render warm 24/7 (the state call also touches Neon, so the database wakes too — no more "backend off", every visitor loads instantly).
