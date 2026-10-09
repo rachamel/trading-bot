@@ -1,5 +1,16 @@
 {
- "open": [],
+ "open": [
+  {
+   "symbol": "GBPUSD=X",
+   "dir": "SHORT",
+   "entry": 1.324591040611267,
+   "sl": 1.3277643859386443,
+   "tp": 1.3220078229904175,
+   "r_target": 0.814,
+   "opened_at": "2026-10-09 08:51:09.618111+00:00",
+   "risk_dollars": 500.0
+  }
+ ],
  "closed": [
   {
    "symbol": "DOT-USD",
