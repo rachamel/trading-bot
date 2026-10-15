@@ -1,5 +1,16 @@
 {
- "open": [],
+ "open": [
+  {
+   "symbol": "CHFJPY=X",
+   "dir": "SHORT",
+   "entry": 190.4770050048828,
+   "sl": 191.08335189819337,
+   "tp": 190.0136196899414,
+   "r_target": 0.764,
+   "opened_at": "2026-10-15 14:50:51.201655+00:00",
+   "risk_dollars": 500.0
+  }
+ ],
  "closed": [
   {
    "symbol": "DOT-USD",
