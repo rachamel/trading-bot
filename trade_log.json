@@ -1,5 +1,16 @@
 {
- "open": [],
+ "open": [
+  {
+   "symbol": "GBPJPY=X",
+   "dir": "SHORT",
+   "entry": 210.20599365234375,
+   "sl": 210.90309524536133,
+   "tp": 209.4272003173828,
+   "r_target": 1.117,
+   "opened_at": "2026-10-16 07:01:25.812965+00:00",
+   "risk_dollars": 500.0
+  }
+ ],
  "closed": [
   {
    "symbol": "DOT-USD",
