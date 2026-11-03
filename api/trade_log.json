@@ -1,5 +1,16 @@
 {
- "open": [],
+ "open": [
+  {
+   "symbol": "EURAUD=X",
+   "dir": "SHORT",
+   "entry": 1.6060099601745605,
+   "sl": 1.612555456161499,
+   "tp": 1.5965019941329956,
+   "r_target": 1.453,
+   "opened_at": "2026-11-03 17:41:12.433219+00:00",
+   "risk_dollars": 500.0
+  }
+ ],
  "closed": [
   {
    "symbol": "DOT-USD",
