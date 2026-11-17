@@ -1,5 +1,16 @@
 {
- "open": [],
+ "open": [
+  {
+   "symbol": "USDJPY=X",
+   "dir": "LONG",
+   "entry": 159.39599609375,
+   "sl": 158.97264862060547,
+   "tp": 159.6988995361328,
+   "r_target": 0.715,
+   "opened_at": "2026-11-17 03:40:14.974463+00:00",
+   "risk_dollars": 500.0
+  }
+ ],
  "closed": [
   {
    "symbol": "DOT-USD",
